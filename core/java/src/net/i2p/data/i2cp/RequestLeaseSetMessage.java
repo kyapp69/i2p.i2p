@@ -98,7 +98,8 @@ public class RequestLeaseSetMessage extends I2CPMessageImpl {
         try {
             _sessionId = new SessionId();
             _sessionId.readBytes(in);
-            int numTunnels = (int) DataHelper.readLong(in, 1);
+            int numTunnels = in.read();
+            // EOF will be caught below
             _endpoints.clear();
             for (int i = 0; i < numTunnels; i++) {
                 //Hash router = new Hash();
@@ -121,7 +122,7 @@ public class RequestLeaseSetMessage extends I2CPMessageImpl {
         ByteArrayOutputStream os = new ByteArrayOutputStream(256);
         try {
             _sessionId.writeBytes(os);
-            DataHelper.writeLong(os, 1, _endpoints.size());
+            os.write((byte) _endpoints.size());
             for (int i = 0; i < _endpoints.size(); i++) {
                 Hash router = getRouter(i);
                 router.writeBytes(os);

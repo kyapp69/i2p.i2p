@@ -2,16 +2,12 @@
 <%@page trimDirectiveWhitespaces="true"%>
 <%@page pageEncoding="UTF-8"%>
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-
 <html><head>
 <%@include file="css.jsi" %>
 <%=intl.title("configure bandwidth")%>
-<script src="/js/ajax.js" type="text/javascript"></script>
 <%@include file="summaryajax.jsi" %>
-</head><body onload="initAjax()">
-
+</head><body>
 <%@include file="summary.jsi" %>
-
 <jsp:useBean class="net.i2p.router.web.helpers.ConfigNetHelper" id="nethelper" scope="request" />
 <jsp:setProperty name="nethelper" property="contextId" value="<%=i2pcontextId%>" />
 <h1><%=intl._t("I2P Bandwidth Configuration")%></h1>
@@ -28,8 +24,13 @@
  <h3 id="bwlimiter" class="tabletitle"><%=intl._t("Bandwidth Limiter")%>&nbsp;<a href="confignet">[<%=intl._t("Advanced Network Configuration")%>]</a></h3>
  <table id="bandwidthconfig" class="configtable">
  <tr><td class="infohelp" colspan="2">
- <b><%=intl._t("I2P will work best if you configure your rates to match the speed of your internet connection.")%></b>
- </td></tr>
+ <b><%=intl._t("I2P will work best if you configure your rates to match the speed of your internet connection.")%></b><p>
+<%=intl._t("All sidebar values are in bytes per second, not bits per second.")%>
+<%=intl._t("You may change your bandwidth limits here.")%>
+<%=intl._t("The more bandwidth you make available, the more you help the network and improve your own anonymity, so please take the time to review the settings.")%>
+<%=intl._t("If you are unsure of your network's speed, use the <a href=\"/welcome?page=3\">Bandwidth Test</a>.")%>
+<%=intl._t("Your upstream share amount (KBps Out) will determine your overall contribution to the network.")%>
+</p></td></tr>
 <%-- display burst, set standard, handler will fix up --%>
    <tr><td><input style="text-align: right; width: 5em;" name="inboundrate" type="text" size="5" maxlength="5" value="<jsp:getProperty name="nethelper" property="inboundBurstRate" />" >
           <%=intl._t("KBps In")%>

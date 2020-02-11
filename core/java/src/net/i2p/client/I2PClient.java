@@ -64,6 +64,19 @@ public interface I2PClient {
      */
     public final static String PROP_FAST_RECEIVE = "i2cp.fastReceive";
 
+    /** @since 0.9.44, was protected in I2PSessionImpl */
+    public static final String PROP_ENABLE_SSL = "i2cp.SSL";
+    /** @since 0.9.44, was protected in I2PSessionImpl */
+    public static final String PROP_USER = "i2cp.username";
+    /** @since 0.9.44, was protected in I2PSessionImpl */
+    public static final String PROP_PW = "i2cp.password";
+
+    /**
+     *  7654
+     *  @since 0.9.38
+     */
+    public static final int DEFAULT_LISTEN_PORT = 7654;
+
     /** protocol flag that must be sent when opening the i2cp connection to the router */
     public final static int PROTOCOL_BYTE = 0x2A;
 

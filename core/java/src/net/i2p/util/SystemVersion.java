@@ -6,6 +6,7 @@ package net.i2p.util;
 
 import java.lang.reflect.Field;
 import java.util.TimeZone;
+import java.util.TreeSet;
 
 import net.i2p.I2PAppContext;
 
@@ -27,11 +28,14 @@ public abstract class SystemVersion {
 
     private static final boolean _isWin = System.getProperty("os.name").startsWith("Win");
     private static final boolean _isMac = System.getProperty("os.name").startsWith("Mac");
-    private static final boolean _isArm = System.getProperty("os.arch").startsWith("arm");
+    private static final boolean _isArm = System.getProperty("os.arch").startsWith("arm") ||
+                                          System.getProperty("os.arch").startsWith("aarch");
     private static final boolean _isX86 = System.getProperty("os.arch").contains("86") ||
                                           System.getProperty("os.arch").equals("amd64");
     private static final boolean _isGentoo = System.getProperty("os.version").contains("gentoo") ||
                                              System.getProperty("os.version").contains("hardened");  // Funtoo
+    // Could also check for java.vm.info = "interpreted mode"
+    private static final boolean _isZero = System.getProperty("java.vm.name").contains("Zero");
     private static final boolean _isAndroid;
     private static final boolean _isApache;
     private static final boolean _isGNU;
@@ -72,7 +76,7 @@ public abstract class SystemVersion {
         _isLinuxService = !_isWin && !_isMac && !_isAndroid &&
                           (DAEMON_USER.equals(System.getProperty("user.name")) ||
                            (_isGentoo && GENTOO_USER.equals(System.getProperty("user.name"))));
-        _isSlow = _isAndroid || _isApache || _isArm || _isGNU || getMaxMemory() < 48*1024*1024L;
+        _isSlow = _isAndroid || _isApache || _isArm || _isGNU || _isZero || getMaxMemory() < 48*1024*1024L;
 
         int sdk = 0;
         if (_isAndroid) {
@@ -163,6 +167,14 @@ public abstract class SystemVersion {
     }
 
     /**
+     *  Is this a very slow interpreted mode VM?
+     *  @since 0.9.38
+     */
+    public static boolean isZeroVM() {
+        return _isZero;
+    }
+
+    /**
      *  Our best guess on whether this is a slow architecture / OS / JVM,
      *  using some simple heuristics.
      *
@@ -229,6 +241,40 @@ public abstract class SystemVersion {
      */
     public static boolean isJava11() {
         return _oneDotEleven;
+    }
+
+    /**
+     *  Handles Android also
+     *
+     *  @param minVersion e.g. 11
+     *  @return true if greater than or equal to minVersion
+     *  @since 0.9.41
+     */
+    public static boolean isJava(int minVersion) {
+        return isJava("1." + minVersion);
+    }
+
+    /**
+     *  Handles Android, and minVersions in both forms (e.g. 11 or 1.11)
+     *
+     *  @param minVersion either 1.x or x form works
+     *  @return true if greater than or equal to minVersion
+     *  @since 0.9.41
+     */
+    public static boolean isJava(String minVersion) {
+        String version = System.getProperty("java.version");
+        if (!version.startsWith("1."))
+            version = "1." + version;
+        if (!minVersion.startsWith("1."))
+            minVersion = "1." + minVersion;
+        if (_isAndroid) {
+            if (minVersion.startsWith("1.6"))
+                return _oneDotSix;
+            if (minVersion.startsWith("1.7"))
+                return _oneDotSeven;
+            return false;
+        }
+        return VersionComparator.comp(version, minVersion) >= 0;
     }
 
     /**
@@ -330,6 +376,7 @@ public abstract class SystemVersion {
         System.out.println("Java 9   : " + isJava9());
         System.out.println("Java 10  : " + isJava10());
         System.out.println("Java 11  : " + isJava11());
+        System.out.println("Java 12  : " + isJava(12));
         System.out.println("Android  : " + isAndroid());
         if (isAndroid())
             System.out.println("  Version: " + getAndroidVersion());
@@ -346,6 +393,19 @@ public abstract class SystemVersion {
         System.out.println("Windows  : " + isWindows());
         System.out.println("Wrapper  : " + hasWrapper());
         System.out.println("x86      : " + isX86());
-
+        System.out.println("Zero JVM : " + isZeroVM());
+        System.out.println("");
+        System.out.println("System Properties:");
+        TreeSet<String> keys = new TreeSet<String>(System.getProperties().stringPropertyNames());
+        for (String k : keys) {
+            String v = System.getProperty(k);
+            if (k.equals("line.separator")) {
+                if ("\n".equals(v))
+                    v = "\\n";
+                else if ("\r\n".equals(v))
+                    v = "\\r\\n";
+            }
+            System.out.println(k + '=' + v);
+        }
     }
 }

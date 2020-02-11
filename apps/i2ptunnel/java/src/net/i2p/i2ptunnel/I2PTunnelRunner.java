@@ -60,7 +60,10 @@ public class I2PTunnelRunner extends I2PAppThread implements I2PSocket.SocketErr
     /** if we die before receiving any data, run this job */
     private final Runnable onTimeout;
     private final FailCallback _onFail;
+    private SuccessCallback _onSuccess;
+    // does not include initialI2PData
     private long totalSent;
+    // does not include initialSocketData
     private long totalReceived;
 
     /**
@@ -72,6 +75,13 @@ public class I2PTunnelRunner extends I2PAppThread implements I2PSocket.SocketErr
          *  @param e may be null
          */
         public void onFail(Exception e);
+    }
+
+    /**
+     *  @since 0.9.39
+     */
+    public interface SuccessCallback {
+        public void onSuccess();
     }
 
     /**
@@ -228,10 +238,22 @@ public class I2PTunnelRunner extends I2PAppThread implements I2PSocket.SocketErr
         return startedOn;
     }
 
+    /**
+     * Will be called if we get any data back.
+     * This is called after the first byte of data is received, not on completion.
+     * Only one of SuccessCallback, onTimeout, or onFail will be called.
+     *
+     * @since 0.9.39
+     */
+    public void setSuccessCallback(SuccessCallback sc) {
+        _onSuccess = sc;
+    }
+
     protected InputStream getSocketIn() throws IOException { return s.getInputStream(); }
     protected OutputStream getSocketOut() throws IOException { return s.getOutputStream(); }
     
     private static final byte[] POST = { 'P', 'O', 'S', 'T', ' ' };
+    private static final byte[] PUT = { 'P', 'U', 'T', ' ' };
 
     @Override
     public void run() {
@@ -267,7 +289,8 @@ public class I2PTunnelRunner extends I2PAppThread implements I2PSocket.SocketErr
                     if (initialI2PData.length <= 1730) {  // ConnectionOptions.DEFAULT_MAX_MESSAGE_SIZE
                         // Don't flush if POST, so we can get POST data into the initial packet
                         if (initialI2PData.length < 5 ||
-                            !DataHelper.eq(POST, 0, initialI2PData, 0, 5))
+                            !(DataHelper.eq(POST, 0, initialI2PData, 0, 5) ||
+                              DataHelper.eq(PUT, 0, initialI2PData, 0, 4)))
                             i2pout.flush();
                     }
                 //}
@@ -282,8 +305,8 @@ public class I2PTunnelRunner extends I2PAppThread implements I2PSocket.SocketErr
                            + " written to the socket, starting forwarders");
             if (!(s instanceof InternalSocket))
                 in = new BufferedInputStream(in, 2*NETWORK_BUFFER_SIZE);
-            toI2P = new StreamForwarder(in, i2pout, true);
-            fromI2P = new StreamForwarder(i2pin, out, false);
+            toI2P = new StreamForwarder(in, i2pout, true, null);
+            fromI2P = new StreamForwarder(i2pin, out, false, _onSuccess);
             toI2P.start();
             // We are already a thread, so run the second one inline
             //fromI2P.start();
@@ -294,13 +317,13 @@ public class I2PTunnelRunner extends I2PAppThread implements I2PSocket.SocketErr
                 }
             }
             if (_log.shouldLog(Log.DEBUG))
-                _log.debug("At least one forwarder completed, closing and joining");
+                _log.debug("Both forwarders completed, sent: " + totalSent + " received: " + totalReceived);
             
             // this task is useful for the httpclient
             if ((onTimeout != null || _onFail != null) && totalReceived <= 0) {
-                if (_log.shouldLog(Log.DEBUG))
-                    _log.debug("runner has a timeout job, totalReceived = " + totalReceived
-                               + " totalSent = " + totalSent + " job = " + onTimeout);
+                //if (_log.shouldLog(Log.DEBUG))
+                //     _log.debug("runner has a timeout job, totalReceived = " + totalReceived
+                //                + " totalSent = " + totalSent + " job = " + onTimeout);
                 // Run even if totalSent > 0, as that's probably POST data.
                 // This will be run even if initialSocketData != null, it's the timeout job's
                 // responsibility to know that and decide whether or not to write to the socket.
@@ -460,15 +483,18 @@ public class I2PTunnelRunner extends I2PAppThread implements I2PSocket.SocketErr
         private final String direction;
         private final boolean _toI2P;
         private final ByteCache _cache;
+        private final SuccessCallback _callback;
         private volatile Exception _failure;
 
         /**
          *  Does not start itself. Caller must start()
+         *  @param cb may be null, only used for toI2P == false
          */
-        public StreamForwarder(InputStream in, OutputStream out, boolean toI2P) {
+        public StreamForwarder(InputStream in, OutputStream out, boolean toI2P, SuccessCallback cb) {
             this.in = in;
             this.out = out;
             _toI2P = toI2P;
+            _callback = cb;
             direction = (toI2P ? "toI2P" : "fromI2P");
             _cache = ByteCache.getInstance(32, NETWORK_BUFFER_SIZE);
             setName("StreamForwarder " + _runnerId + '.' + direction);
@@ -495,10 +521,13 @@ public class I2PTunnelRunner extends I2PAppThread implements I2PSocket.SocketErr
                 while ((len = in.read(buffer)) != -1) {
                     if (len > 0) {
                         out.write(buffer, 0, len);
-                        if (_toI2P)
+                        if (_toI2P) {
                             totalSent += len;
-                        else
+                        } else {
+                            if (totalReceived == 0 && _callback != null)
+                                _callback.onSuccess();
                             totalReceived += len;
+                        }
                         //updateActivity();
                     }
 
@@ -577,8 +606,8 @@ public class I2PTunnelRunner extends I2PAppThread implements I2PSocket.SocketErr
                     else if (_log.shouldLog(Log.INFO))
                         _log.info(direction + ": not closing so we can write the error message");
                 } catch (IOException ioe) {
-                    if (_log.shouldLog(Log.WARN))
-                        _log.warn(direction + ": Error flushing to close", ioe);
+                    if (_log.shouldLog(Log.DEBUG))
+                        _log.debug(direction + ": Error flushing to close", ioe);
                 }
                 synchronized (finishLock) {
                     finished = true;

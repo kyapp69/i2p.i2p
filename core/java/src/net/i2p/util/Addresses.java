@@ -52,6 +52,7 @@ public abstract class Addresses {
     private static final Map<Inet6Address, Inet6Addr> _ifCache = INET6_CACHE_ENABLED ? new HashMap<Inet6Address, Inet6Addr>(8) : null;
     /** 12 char hex lower case */
     private static final Set<String> _macCache = new HashSet<String>();
+    private static final boolean TEST_IPV6_ONLY = false;
 
     /**
      *  Do we have any non-loop, non-wildcard IPv4 address at all?
@@ -251,6 +252,18 @@ public abstract class Addresses {
 
     private static boolean shouldInclude(InetAddress ia, boolean includeSiteLocal,
                                          boolean includeLoopbackAndWildcard, boolean includeIPv6) {
+        if (TEST_IPV6_ONLY) {
+            byte[] ip = ia.getAddress();
+            if (ip.length == 4) {
+                int i = ip[0] & 0xff;
+                if (i != 127 &&
+                    i != 192 &&
+                    i != 10 &&
+                    i != 0)
+                    return false;
+            }
+        }
+
         return
             (!ia.isLinkLocalAddress()) &&     // 169.254.x.x
             (!ia.isMulticastAddress()) &&
@@ -291,7 +304,7 @@ public abstract class Addresses {
     /**
      *  Convenience method to convert an IP address and port to a String
      *  without throwing an exception.
-     *  @return "ip:port"
+     *  @return "ipv4:port" or "[ipv6]:port"
      *  @since 0.8.12
      */
     public static String toString(byte[] addr, int port) {

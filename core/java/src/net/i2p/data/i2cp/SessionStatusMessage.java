@@ -10,6 +10,7 @@ package net.i2p.data.i2cp;
  */
 
 import java.io.ByteArrayOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -33,6 +34,11 @@ public class SessionStatusMessage extends I2CPMessageImpl {
     public final static int STATUS_INVALID = 3;
     /** @since 0.9.12 */
     public final static int STATUS_REFUSED = 4;
+    /**
+     *  Used internally, not in spec, will be remapped to STATUS_INVALID before being sent.
+     *  @since 0.9.44
+     */
+    public final static int STATUS_DUP_DEST = 5;
 
     public SessionStatusMessage() {
         setStatus(STATUS_INVALID);
@@ -69,7 +75,9 @@ public class SessionStatusMessage extends I2CPMessageImpl {
         try {
             _sessionId = new SessionId();
             _sessionId.readBytes(in);
-            _status = (int) DataHelper.readLong(in, 1);
+            _status = in.read();
+            if (_status < 0)
+                throw new EOFException();
         } catch (DataFormatException dfe) {
             throw new I2CPMessageException("Unable to load the message data", dfe);
         }
@@ -82,7 +90,7 @@ public class SessionStatusMessage extends I2CPMessageImpl {
         ByteArrayOutputStream os = new ByteArrayOutputStream(64);
         try {
             _sessionId.writeBytes(os);
-            DataHelper.writeLong(os, 1, _status);
+            os.write((byte) _status);
         } catch (DataFormatException dfe) {
             throw new I2CPMessageException("Error writing out the message data", dfe);
         }

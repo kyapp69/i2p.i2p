@@ -51,6 +51,7 @@ import net.i2p.util.SystemVersion;
 public class TunnelController implements Logging {
     private final Log _log;
     private Properties _config;
+    private File _configFile;
     private final I2PTunnel _tunnel;
     private final List<String> _messages;
     private List<I2PSession> _sessions;
@@ -66,7 +67,7 @@ public class TunnelController implements Logging {
         DESTROYING,
         DESTROYED,
     }
-    
+
     public static final String KEY_BACKUP_DIR = "i2ptunnel-keyBackup";
 
     /** all of these @since 0.9.14 */
@@ -85,7 +86,10 @@ public class TunnelController implements Logging {
     public static final String PROP_TARGET_HOST = "targetHost";
     public static final String PROP_TARGET_PORT = "targetPort";
     public static final String PROP_TYPE = "type";
-    
+    public static final String PROP_FILTER = "filterDefinition";
+    /** @since 0.9.42 */
+    public static final String PROP_CONFIG_FILE = "configFile";
+
     /**
      * all of these are @since 0.9.33 (moved from TunnelConfig)
      */
@@ -97,13 +101,13 @@ public class TunnelController implements Logging {
     public static final String PROP_MAX_TOTAL_CONNS_DAY = "i2p.streaming.maxTotalConnsPerDay";
     public static final String PROP_MAX_STREAMS = "i2p.streaming.maxConcurrentStreams";
     public static final String PROP_LIMITS_SET = "i2p.streaming.limitsManuallySet";
-    public static final int DEFAULT_MAX_CONNS_MIN = 10;
-    public static final int DEFAULT_MAX_CONNS_HOUR = 40;
-    public static final int DEFAULT_MAX_CONNS_DAY = 100;
-    public static final int DEFAULT_MAX_TOTAL_CONNS_MIN = 25;
+    public static final int DEFAULT_MAX_CONNS_MIN = 30;
+    public static final int DEFAULT_MAX_CONNS_HOUR = 80;
+    public static final int DEFAULT_MAX_CONNS_DAY = 200;
+    public static final int DEFAULT_MAX_TOTAL_CONNS_MIN = 50;
     public static final int DEFAULT_MAX_TOTAL_CONNS_HOUR = 0;
     public static final int DEFAULT_MAX_TOTAL_CONNS_DAY = 0;
-    public static final int DEFAULT_MAX_STREAMS = 20;
+    public static final int DEFAULT_MAX_STREAMS = 30;
 
     /** @since 0.9.34 */
     public static final String PROP_LIMIT_ACTION = "i2p.streaming.limitAction";
@@ -173,9 +177,12 @@ public class TunnelController implements Logging {
      * The config may contain a large number of options - only ones that begin in
      * the prefix should be used (and, in turn, that prefix should be stripped off
      * before being interpreted by this controller)
-     * 
+     *
+     * If config contains the "configFile" property, it will be set as the config path
+     * and may be retrieved with getConfigFile().
+     *
      * Defaults in config properties are not recommended, they may or may not be honored.
-     * 
+     *
      * @param config original key=value mapping non-null
      * @param prefix beginning of key values that are relevant to this tunnel
      */
@@ -184,8 +191,16 @@ public class TunnelController implements Logging {
     }
 
     /**
+     * Create a new controller for a tunnel out of the specific config options.
+     * The config may contain a large number of options - only ones that begin in
+     * the prefix should be used (and, in turn, that prefix should be stripped off
+     * before being interpreted by this controller)
+     *
+     * If config contains the "configFile" property, it will be set as the config path
+     * and may be retrieved with getConfigFile().
+     *
      * Defaults in config properties are not recommended, they may or may not be honored.
-     * 
+     *
      * @param config original key=value mapping non-null
      * @param prefix beginning of key values that are relevant to this tunnel
      * @param createKey for servers, whether we want to create a brand new destination
@@ -207,7 +222,7 @@ public class TunnelController implements Logging {
         }
         _state = keyOK && getStartOnLoad() ? TunnelState.START_ON_LOAD : TunnelState.STOPPED;
     }
-    
+
     /**
      * @return success
      */
@@ -218,7 +233,7 @@ public class TunnelController implements Logging {
             log("No filename specified for the private key");
             return false;
         }
-        
+
         if (keyFile.exists()) {
             //log("Not overwriting existing private keys in " + keyFile.getAbsolutePath());
             return true;
@@ -270,7 +285,7 @@ public class TunnelController implements Logging {
         }
         return true;
     }
-    
+
     /**
      * Creates alternate Destination with the same encryption keys as the primary Destination,
      * but a different signing key.
@@ -323,7 +338,7 @@ public class TunnelController implements Logging {
             } else if (len > 128) {
                 // copy of excess data handled in KeyCertificate constructor
             }
-        
+
             out = new SecureFileOutputStream(altFile);
             d.writeBytes(out);
             priv.writeBytes(out);
@@ -365,7 +380,7 @@ public class TunnelController implements Logging {
             if (out != null) try { out.close(); } catch (IOException ioe) {}
         }
     }
-    
+
     public void startTunnelBackground() {
         synchronized (this) {
             if (_state != TunnelState.STOPPED && _state != TunnelState.START_ON_LOAD)
@@ -373,7 +388,7 @@ public class TunnelController implements Logging {
         }
         new I2PAppThread(new Runnable() { public void run() { startTunnel(); } }, "Tunnel Starter " + getName()).start();
     }
-    
+
     /**
      * Start up the tunnel (if it isn't already running)
      *
@@ -410,7 +425,7 @@ public class TunnelController implements Logging {
                 return;
         }
 
-        String type = getType(); 
+        String type = getType();
         if ( (type == null) || (type.length() <= 0) ) {
             changeState(TunnelState.STOPPED);
             if (_log.shouldLog(Log.ERROR))
@@ -466,7 +481,7 @@ public class TunnelController implements Logging {
         acquire();
         changeState(TunnelState.RUNNING);
     }
-    
+
     private void startHttpClient() {
         setListenOn();
         String listenPort = getListenPort();
@@ -477,7 +492,7 @@ public class TunnelController implements Logging {
         else
             _tunnel.runHttpClient(new String[] { listenPort, sharedClient, proxyList }, this);
     }
-    
+
     private void startConnectClient() {
         setListenOn();
         String listenPort = getListenPort();
@@ -488,20 +503,20 @@ public class TunnelController implements Logging {
         else
             _tunnel.runConnectClient(new String[] { listenPort, sharedClient, proxyList }, this);
     }
-    
+
     private void startIrcClient() {
         setListenOn();
         String listenPort = getListenPort();
         String dest = getTargetDestination();
         String sharedClient = getSharedClient();
         if (getPersistentClientKey()) {
-            String privKeyFile = getPrivKeyFile(); 
+            String privKeyFile = getPrivKeyFile();
             _tunnel.runIrcClient(new String[] { listenPort, dest, sharedClient, privKeyFile }, this);
         } else {
             _tunnel.runIrcClient(new String[] { listenPort, dest, sharedClient }, this);
         }
     }
-    
+
     private void startSocksClient() {
         setListenOn();
         String listenPort = getListenPort();
@@ -514,13 +529,13 @@ public class TunnelController implements Logging {
                 props.setProperty(I2PSOCKSTunnel.PROP_PROXY_DEFAULT, proxyList);
         }
         if (getPersistentClientKey()) {
-            String privKeyFile = getPrivKeyFile(); 
+            String privKeyFile = getPrivKeyFile();
             _tunnel.runSOCKSTunnel(new String[] { listenPort, "false", privKeyFile }, this);
         } else {
             _tunnel.runSOCKSTunnel(new String[] { listenPort, sharedClient }, this);
         }
     }
-    
+
     /** @since 0.7.12 */
     private void startSocksIRCClient() {
         setListenOn();
@@ -534,13 +549,13 @@ public class TunnelController implements Logging {
                 props.setProperty(I2PSOCKSTunnel.PROP_PROXY_DEFAULT, proxyList);
         }
         if (getPersistentClientKey()) {
-            String privKeyFile = getPrivKeyFile(); 
+            String privKeyFile = getPrivKeyFile();
             _tunnel.runSOCKSIRCTunnel(new String[] { listenPort, "false", privKeyFile }, this);
         } else {
             _tunnel.runSOCKSIRCTunnel(new String[] { listenPort, sharedClient }, this);
         }
     }
-    
+
     /*
      *  Streamr client is a UDP server, use the listenPort field for targetPort
      */
@@ -550,7 +565,7 @@ public class TunnelController implements Logging {
         String dest = getTargetDestination();
         _tunnel.runStreamrClient(new String[] { targetHost, targetPort, dest }, this);
     }
-    
+
     /**
      *  Streamr server is a UDP client, use the targetPort field for listenPort
      */
@@ -560,11 +575,11 @@ public class TunnelController implements Logging {
             _tunnel.runListenOn(new String[] { listenOn }, this);
         }
         String listenPort = getTargetPort();
-        String privKeyFile = getPrivKeyFile(); 
+        String privKeyFile = getPrivKeyFile();
         _tunnel.runStreamrServer(new String[] { listenPort, privKeyFile }, this);
     }
-    
-    /** 
+
+    /**
      * Note the fact that we are using some sessions, so that they dont get
      * closed by some other tunnels
      */
@@ -585,8 +600,8 @@ public class TunnelController implements Logging {
                 _log.warn("No sessions to acquire? for " + getName());
         }
     }
-    
-    /** 
+
+    /**
      * Note the fact that we are no longer using some sessions, and if
      * no other tunnels are using them, close them.
      */
@@ -606,7 +621,7 @@ public class TunnelController implements Logging {
         }
     }
 
-    /** 
+    /**
      *  Get all the sessions we may be using.
      *
      *  @return a copy, non-null
@@ -621,14 +636,14 @@ public class TunnelController implements Logging {
             sessions.addAll(_sessions);
         return sessions;
     }
-    
+
     private void startClient() {
         setListenOn();
-        String listenPort = getListenPort(); 
+        String listenPort = getListenPort();
         String dest = getTargetDestination();
         String sharedClient = getSharedClient();
         if (getPersistentClientKey()) {
-            String privKeyFile = getPrivKeyFile(); 
+            String privKeyFile = getPrivKeyFile();
             _tunnel.runClient(new String[] { listenPort, dest, sharedClient, privKeyFile }, this);
         } else {
             _tunnel.runClient(new String[] { listenPort, dest, sharedClient }, this);
@@ -636,20 +651,20 @@ public class TunnelController implements Logging {
     }
 
     private void startServer() {
-        String targetHost = getTargetHost(); 
-        String targetPort = getTargetPort(); 
-        String privKeyFile = getPrivKeyFile(); 
+        String targetHost = getTargetHost();
+        String targetPort = getTargetPort();
+        String privKeyFile = getPrivKeyFile();
         _tunnel.runServer(new String[] { targetHost, targetPort, privKeyFile }, this);
     }
-    
+
     private void startHttpServer() {
-        String targetHost = getTargetHost(); 
-        String targetPort = getTargetPort(); 
-        String spoofedHost = getSpoofedHost(); 
-        String privKeyFile = getPrivKeyFile(); 
+        String targetHost = getTargetHost();
+        String targetPort = getTargetPort();
+        String spoofedHost = getSpoofedHost();
+        String privKeyFile = getPrivKeyFile();
         _tunnel.runHttpServer(new String[] { targetHost, targetPort, spoofedHost, privKeyFile }, this);
     }
-    
+
     private void startHttpBidirServer() {
         setListenOn();
         String targetHost = getTargetHost();
@@ -661,19 +676,19 @@ public class TunnelController implements Logging {
     }
 
     private void startIrcServer() {
-        String targetHost = getTargetHost(); 
-        String targetPort = getTargetPort(); 
-        String privKeyFile = getPrivKeyFile(); 
+        String targetHost = getTargetHost();
+        String targetPort = getTargetPort();
+        String privKeyFile = getPrivKeyFile();
         _tunnel.runIrcServer(new String[] { targetHost, targetPort, privKeyFile }, this);
     }
-    
+
     private void setListenOn() {
         String listenOn = getListenOnInterface();
         if ( (listenOn != null) && (listenOn.length() > 0) ) {
             _tunnel.runListenOn(new String[] { listenOn }, this);
         }
     }
-    
+
     /**
      *  These are the ones stored with a prefix of "option."
      *  Defaults in config properties are not honored.
@@ -719,13 +734,13 @@ public class TunnelController implements Logging {
             opts.setProperty(PROP_TARGET_PORT, targetport);
         _tunnel.setClientOptions(opts);
     }
-    
+
     private void setI2CPOptions() {
         String host = getI2CPHost();
-        if ( (host != null) && (host.length() > 0) ) 
+        if ( (host != null) && (host.length() > 0) )
             _tunnel.host = host;
         // woohah, special casing for people with ipv6/etc
-        if ("localhost".equals(_tunnel.host)) 
+        if ("localhost".equals(_tunnel.host))
             _tunnel.host = "127.0.0.1";
         String port = getI2CPPort();
         if ( (port != null) && (port.length() > 0) ) {
@@ -733,10 +748,10 @@ public class TunnelController implements Logging {
                 int portNum = Integer.parseInt(port);
                 _tunnel.port = String.valueOf(portNum);
             } catch (NumberFormatException nfe) {
-                _tunnel.port = "7654";
+                _tunnel.port = Integer.toString(I2PClient.DEFAULT_LISTEN_PORT);
             }
         } else {
-            _tunnel.port = "7654";
+            _tunnel.port = Integer.toString(I2PClient.DEFAULT_LISTEN_PORT);
         }
     }
 
@@ -778,27 +793,37 @@ public class TunnelController implements Logging {
         release(sessions);
         changeState(TunnelState.DESTROYED);
     }
-    
+
     public void restartTunnel() {
         stopTunnel();
         startTunnel();
     }
-    
+
     /**
      *  As of 0.9.1, updates the options on an existing session
      */
     public void setConfig(Properties config, String prefix) {
-        Properties props = new Properties();
-        for (Map.Entry<Object, Object> e : config.entrySet()) {
-            String key = (String) e.getKey();
-            if (key.startsWith(prefix)) {
-                key = key.substring(prefix.length());
-                String val = (String) e.getValue();
-                props.setProperty(key, val);
+        Properties props;
+        if (prefix.length() > 0) {
+            props = new Properties();
+            for (Map.Entry<Object, Object> e : config.entrySet()) {
+                String key = (String) e.getKey();
+                if (key.startsWith(prefix)) {
+                    key = key.substring(prefix.length());
+                    String val = (String) e.getValue();
+                    props.setProperty(key, val);
+                }
             }
+        } else {
+            props = config;
         }
         Properties oldConfig = _config;
         _config = props;
+
+        // save the config file this was loaded from, if passed in
+        String cname = _config.getProperty(PROP_CONFIG_FILE);
+        if (cname != null && _configFile == null)
+            _configFile = new File(cname);
 
         // Set up some per-type defaults
         // This really isn't the best spot to do this but for servers in particular,
@@ -834,6 +859,8 @@ public class TunnelController implements Logging {
                     _config.setProperty(OPT_SIG_TYPE, PREFERRED_SIGTYPE.name());
             }
             if (!isClient(type)) {
+                _tunnel.filterDefinition = _config.getProperty(PROP_FILTER);
+
                 String p1 = _config.getProperty(OPT_MAX_CONNS_MIN, "0");
                 String p2 = _config.getProperty(OPT_MAX_CONNS_HOUR, "0");
                 String p3 = _config.getProperty(OPT_MAX_CONNS_DAY, "0");
@@ -916,21 +943,44 @@ public class TunnelController implements Logging {
     /**
      *  @return a copy
      */
-    public Properties getConfig(String prefix) { 
+    public Properties getConfig(String prefix) {
         Properties rv = new Properties();
-        for (Map.Entry<Object, Object> e : _config.entrySet()) {
-            String key = (String) e.getKey();
-            String val = (String) e.getValue();
-            rv.setProperty(prefix + key, val);
+        if (prefix.length() > 0) {
+            for (Map.Entry<Object, Object> e : _config.entrySet()) {
+                String key = (String) e.getKey();
+                String val = (String) e.getValue();
+                rv.setProperty(prefix + key, val);
+            }
+        } else {
+            rv.putAll(_config);
         }
         return rv;
     }
+
+    /**
+     *  @return the config file as passed into constructor via "configFile" property,
+     *          or as set later, or null
+     *  @since 0.9.42
+     */
+    public File getConfigFile() { return _configFile; }
+
+    /**
+     *  Set the config file. Only do this if previously null.
+     *  @since 0.9.42
+     */
+    public void setConfigFile(File file) { _configFile = file; }
 
     public String getType() { return _config.getProperty(PROP_TYPE); }
     public String getName() { return _config.getProperty(PROP_NAME); }
     public String getDescription() { return _config.getProperty(PROP_DESCR); }
     public String getI2CPHost() { return _config.getProperty(PROP_I2CP_HOST); }
     public String getI2CPPort() { return _config.getProperty(PROP_I2CP_PORT); }
+
+    /**
+     *  Absolute path to filter definition file
+     *  @since 0.9.40
+     */
+    public String getFilter() { return _config.getProperty(PROP_FILTER); }
 
     /**
      *  Is it a client or server in the UI and I2P side?
@@ -951,7 +1001,7 @@ public class TunnelController implements Logging {
      *  @since 0.9.17 moved from IndexBean
      */
     public static boolean isClient(String type) {
-        return TYPE_STD_CLIENT.equals(type) || 
+        return TYPE_STD_CLIENT.equals(type) ||
                TYPE_HTTP_CLIENT.equals(type) ||
                TYPE_SOCKS.equals(type) ||
                TYPE_SOCKS_IRC.equals(type) ||
@@ -1046,7 +1096,7 @@ public class TunnelController implements Logging {
             return dest.toBase64();
         return null;
     }
-    
+
     /**
      *  Returns null if not running.
      *  @return "{52 chars}.b32.i2p" or null
@@ -1057,7 +1107,7 @@ public class TunnelController implements Logging {
             return dest.toBase32();
         return null;
     }
-    
+
     /**
      *  Returns null if not running.
      *  @return Destination or null
@@ -1075,7 +1125,22 @@ public class TunnelController implements Logging {
         }
         return null;
     }
-    
+
+    /**
+     *  Returns false if not running.
+     *  @return true if offline keys or not running
+     *  @since 0.9.40
+     */
+    public boolean getIsOfflineKeys() {
+        if (_tunnel != null) {
+            List<I2PSession> sessions = _tunnel.getSessions();
+            if (!sessions.isEmpty())
+                return sessions.get(0).isOffline();
+        }
+        return false;
+    }
+
+    // TODO synch
     public boolean getIsRunning() { return _state == TunnelState.RUNNING; }
     public boolean getIsStarting() { return _state == TunnelState.START_ON_LOAD || _state == TunnelState.STARTING; }
 
@@ -1097,7 +1162,7 @@ public class TunnelController implements Logging {
     private synchronized void changeState(TunnelState state) {
         _state = state;
     }
-    
+
     /**
      *  A text description of the tunnel.
      *  @deprecated unused
@@ -1119,7 +1184,7 @@ public class TunnelController implements Logging {
             buf.append("Unknown type ").append(type);
        ****/
     }
-    
+
   /****
     private void getHttpClientSummary(StringBuilder buf) {
         String description = getDescription();
@@ -1127,7 +1192,7 @@ public class TunnelController implements Logging {
             buf.append("<i>").append(description).append("</i><br />\n");
         buf.append("HTTP proxy listening on port ").append(getListenPort());
         String listenOn = getListenOnInterface();
-        if ("0.0.0.0".equals(listenOn)) 
+        if ("0.0.0.0".equals(listenOn))
             buf.append(" (reachable by any machine)");
         else if ("127.0.0.1".equals(listenOn))
             buf.append(" (reachable locally only)");
@@ -1141,7 +1206,7 @@ public class TunnelController implements Logging {
             buf.append("Outproxy: ").append(proxies).append("<br />\n");
         getOptionSummary(buf);
     }
-    
+
     private void getClientSummary(StringBuilder buf) {
         String description = getDescription();
         if ( (description != null) && (description.trim().length() > 0) )
@@ -1149,7 +1214,7 @@ public class TunnelController implements Logging {
         buf.append("Client tunnel listening on port ").append(getListenPort());
         buf.append(" pointing at ").append(getTargetDestination());
         String listenOn = getListenOnInterface();
-        if ("0.0.0.0".equals(listenOn)) 
+        if ("0.0.0.0".equals(listenOn))
             buf.append(" (reachable by any machine)");
         else if ("127.0.0.1".equals(listenOn))
             buf.append(" (reachable locally only)");
@@ -1158,7 +1223,7 @@ public class TunnelController implements Logging {
         buf.append("<br />\n");
         getOptionSummary(buf);
     }
-    
+
     private void getServerSummary(StringBuilder buf) {
         String description = getDescription();
         if ( (description != null) && (description.trim().length() > 0) )
@@ -1169,7 +1234,7 @@ public class TunnelController implements Logging {
         buf.append("Private destination loaded from ").append(getPrivKeyFile()).append("<br />\n");
         getOptionSummary(buf);
     }
-    
+
     private void getHttpServerSummary(StringBuilder buf) {
         String description = getDescription();
         if ( (description != null) && (description.trim().length() > 0) )
@@ -1181,7 +1246,7 @@ public class TunnelController implements Logging {
         buf.append("Private destination loaded from ").append(getPrivKeyFile()).append("<br />\n");
         getOptionSummary(buf);
     }
-    
+
     private void getOptionSummary(StringBuilder buf) {
         String opts = getClientOptions();
         if ( (opts != null) && (opts.length() > 0) )
@@ -1213,7 +1278,7 @@ public class TunnelController implements Logging {
         }
     }
   ****/
-    
+
     /**
      *
      */
@@ -1226,13 +1291,13 @@ public class TunnelController implements Logging {
         if (_log.shouldLog(Log.INFO))
             _log.info(s);
     }
-    
+
     /**
-     * Pull off any messages that the I2PTunnel has produced 
+     * Pull off any messages that the I2PTunnel has produced
      *
      * @return list of messages pulled off (each is a String, earliest first)
      */
-    public List<String> clearMessages() { 
+    public List<String> clearMessages() {
         List<String> rv;
         synchronized (_messages) {
             rv = new ArrayList<String>(_messages);
@@ -1245,7 +1310,7 @@ public class TunnelController implements Logging {
      * @since 0.9.15
      */
     @Override
-    public String toString() { 
+    public String toString() {
         return "TC " + getType() + ' ' + getName() + " for " + _tunnel + ' ' + _state;
     }
 }

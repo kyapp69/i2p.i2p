@@ -123,6 +123,8 @@ class InboundEstablishState extends EstablishBase implements NTCP2Payload.Payloa
     public int getVersion() {
         if (!_transport.isNTCP2Enabled())
             return 1;
+        if (!_transport.isNTCP1Enabled())
+            return 2;
         synchronized (_stateLock) {
             if (_state == State.IB_INIT)
                 return 0;
@@ -160,7 +162,8 @@ class InboundEstablishState extends EstablishBase implements NTCP2Payload.Payloa
                         _log.warn("Short buffer got " + remaining + " total now " + _received + " on " + this);
                     return;
                 }
-                if (remaining + _received < NTCP1_MSG1_SIZE) {
+                if (remaining + _received < NTCP1_MSG1_SIZE ||
+                    !_transport.isNTCP1Enabled()) {
                     // Less than 288 total received, assume NTCP2
                     // TODO can't change our mind later if we get more than 287
                     _con.setVersion(2);
@@ -573,6 +576,38 @@ class InboundEstablishState extends EstablishBase implements NTCP2Payload.Payloa
     }
 
     /**
+     *  Validate network ID, NTCP 2 only.
+     *  Call after receiving Alice's RouterInfo,
+     *  but before storing it in the netdb.
+     *
+     *  Side effects: When returning false, sets _msg3p2FailReason,
+     *  banlists permanently and blocklists
+     *
+     *  @return success
+     *  @since 0.9.38
+     */
+    private boolean verifyInboundNetworkID(RouterInfo alice) {
+        int aliceID = alice.getNetworkId();
+        boolean rv = aliceID == _context.router().getNetworkID();
+        if (!rv) {
+            Hash aliceHash = alice.getHash();
+            if (_log.shouldLog(Log.WARN))
+                _log.warn("Dropping inbound connection from wrong network: " + aliceID + ' ' + aliceHash);
+            // So next time we will not accept the con from this IP,
+            // rather than doing the whole handshake
+            InetAddress addr = _con.getChannel().socket().getInetAddress();
+            if (addr != null) {
+                byte[] ip = addr.getAddress();
+                _context.blocklist().add(ip);
+            }
+            _context.banlist().banlistRouterForever(aliceHash, "Not in our network: " + aliceID);
+            _transport.markUnreachable(aliceHash);
+            _msg3p2FailReason = NTCPConnection.REASON_BANNED;
+        }
+        return rv;
+    }
+
+    /**
      *  We are Bob. Send message #4 to Alice.
      *
      *  State must be VERIFIED.
@@ -647,7 +682,7 @@ class InboundEstablishState extends EstablishBase implements NTCP2Payload.Payloa
             }
 
             try {
-                _handshakeState = new HandshakeState(HandshakeState.RESPONDER, _transport.getXDHFactory());
+                _handshakeState = new HandshakeState(HandshakeState.PATTERN_ID_XK, HandshakeState.RESPONDER, _transport.getXDHFactory());
             } catch (GeneralSecurityException gse) {
                 throw new IllegalStateException("bad proto", gse);
             }
@@ -694,6 +729,20 @@ class InboundEstablishState extends EstablishBase implements NTCP2Payload.Payloa
                 fail("Bad version: " + v);
                 return;
             }
+            // network ID cross-check, proposal 147, as of 0.9.42
+            v = options[0] & 0xff;
+            if (v != 0 && v != _context.router().getNetworkID()) {
+                InetAddress addr = _con.getChannel().socket().getInetAddress();
+                if (addr != null) {
+                    if (_log.shouldLog(Log.WARN))
+                        _log.warn("Dropping inbound connection from wrong network: " + addr);
+                    byte[] ip = addr.getAddress();
+                    // So next time we will not accept the con from this IP
+                    _context.blocklist().add(ip);
+                }
+                fail("Bad network id: " + v);
+                return;
+            }
             _padlen1 = (int) DataHelper.fromLong(options, 2, 2);
             _msg3p2len = (int) DataHelper.fromLong(options, 4, 2);
             long tsA = DataHelper.fromLong(options, 8, 4);
@@ -711,7 +760,8 @@ class InboundEstablishState extends EstablishBase implements NTCP2Payload.Payloa
                 fail("Clock Skew: " + _peerSkew, null, true);
                 return;
             }
-            if (_padlen1 > PADDING1_MAX) {
+            // If NTCP1 disabled, we allow longer padding
+            if (_padlen1 > PADDING1_MAX && _transport.isNTCP1Enabled()) {
                 fail("bad msg 1 padlen: " + _padlen1);
                 return;
             }
@@ -988,6 +1038,9 @@ class InboundEstablishState extends EstablishBase implements NTCP2Payload.Payloa
         boolean ok = verifyInbound(h);
         if (!ok)
             throw new DataFormatException("NTCP2 verifyInbound() fail");
+        ok = verifyInboundNetworkID(ri);
+        if (!ok)
+            throw new DataFormatException("NTCP2 network ID mismatch");
         try {
             RouterInfo old = _context.netDb().store(h, ri);
             if (flood && !ri.equals(old)) {
@@ -1002,8 +1055,9 @@ class InboundEstablishState extends EstablishBase implements NTCP2Payload.Payloa
             }
         } catch (IllegalArgumentException iae) {
             // hash collision?
-            _msg3p2FailReason = NTCPConnection.REASON_UNSPEC;
-            throw new DataFormatException("RI store fail", iae);
+            // expired RI?
+            _msg3p2FailReason = NTCPConnection.REASON_MSG3;
+            throw new DataFormatException("RI store fail: " + ri, iae);
         }
         _con.setRemotePeer(_aliceIdent);
     }

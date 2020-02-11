@@ -59,9 +59,9 @@ public class SummaryHelper extends HelperBase {
         "I2PInternals" + S +
         "HelpAndFAQ" + S +
         "Peers" + S +
+        "RestartStatus" + S +
         "Tunnels" + S +
         "TunnelStatus" + S +
-        "RestartStatus" + S +
         "Destinations" + S +
         "";
 
@@ -76,10 +76,10 @@ public class SummaryHelper extends HelperBase {
         "I2PInternals" + S +
         "Advanced" + S +
         "Peers" + S +
+        "RestartStatus" + S +
         "Tunnels" + S +
         "TunnelStatus" + S +
         "Congestion" + S +
-        "RestartStatus" + S +
         "Destinations" + S +
         "";
 
@@ -220,9 +220,13 @@ public class SummaryHelper extends HelperBase {
     private NetworkStateMessage reachability() {
         if (_context.commSystem().isDummy())
             return new NetworkStateMessage(NetworkState.VMCOMM, "VM Comm System");
-        if (_context.router().getUptime() > 60*1000 && (!_context.router().gracefulShutdownInProgress()) &&
-            !_context.clientManager().isAlive())
+/*
+        if (_context.router().getUptime() > 60*1000 &&
+            !_context.clientManager().isAlive() &&
+            !_context.router().gracefulShutdownInProgress() &&
+            !_context.router().isRestarting())
             return new NetworkStateMessage(NetworkState.ERROR, _t("ERR-Client Manager I2CP Error - check logs"));  // not a router problem but the user should know
+*/
         // Warn based on actual skew from peers, not update status, so if we successfully offset
         // the clock, we don't complain.
         //if (!_context.clock().getUpdatedSuccessfully())
@@ -237,6 +241,7 @@ public class SummaryHelper extends HelperBase {
             return new NetworkStateMessage(NetworkState.TESTING, _t("Testing"));
 
         Status status = _context.commSystem().getStatus();
+        String txstatus = _context.commSystem().getLocalizedStatusString();
         NetworkState state = NetworkState.RUNNING;
         switch (status) {
             case OK:
@@ -245,15 +250,24 @@ public class SummaryHelper extends HelperBase {
             case IPV4_UNKNOWN_IPV6_OK:
             case IPV4_DISABLED_IPV6_OK:
             case IPV4_SNAT_IPV6_OK:
-                RouterAddress ra = routerInfo.getTargetAddress("NTCP");
-                if (ra == null)
-                    return new NetworkStateMessage(NetworkState.RUNNING, _t(status.toStatusString()));
-                byte[] ip = ra.getIP();
-                if (ip == null)
-                    return new NetworkStateMessage(NetworkState.ERROR, _t("ERR-Unresolved TCP Address"));
+                List<RouterAddress> ras = routerInfo.getTargetAddresses("NTCP", "NTCP2");
+                if (ras.isEmpty())
+                    return new NetworkStateMessage(NetworkState.RUNNING, txstatus);
+                byte[] ip = null;
+                for (RouterAddress ra : ras) {
+                    ip = ra.getIP();
+                    if (ip != null)
+                        break;
+                }
+                if (ip == null) {
+                    // Usually a transient issue during state transitions, possibly with hidden mod, don't show this
+                    // NTCP2 addresses may not have an IP
+                    //return new NetworkStateMessage(NetworkState.ERROR, _t("ERR-Unresolved TCP Address"));
+                    return new NetworkStateMessage(NetworkState.RUNNING, txstatus);
+                }
                 // TODO set IPv6 arg based on configuration?
                 if (TransportUtil.isPubliclyRoutable(ip, true))
-                    return new NetworkStateMessage(NetworkState.RUNNING, _t(status.toStatusString()));
+                    return new NetworkStateMessage(NetworkState.RUNNING, txstatus);
                 return new NetworkStateMessage(NetworkState.ERROR, _t("ERR-Private TCP Address"));
 
             case IPV4_SNAT_IPV6_UNKNOWN:
@@ -272,7 +286,7 @@ public class SummaryHelper extends HelperBase {
                     return new NetworkStateMessage(NetworkState.WARN, _t("WARN-Firewalled and Floodfill"));
                 //if (_context.router().getRouterInfo().getCapabilities().indexOf('O') >= 0)
                 //    return new NetworkStateMessage(NetworkState.WARN, _t("WARN-Firewalled and Fast"));
-                return new NetworkStateMessage(state, _t(status.toStatusString()));
+                return new NetworkStateMessage(state, txstatus);
 
             case DISCONNECTED:
                 return new NetworkStateMessage(NetworkState.TESTING, _t("Disconnected - check network connection"));
@@ -285,7 +299,7 @@ public class SummaryHelper extends HelperBase {
             case IPV4_UNKNOWN_IPV6_FIREWALLED:
             case IPV4_DISABLED_IPV6_UNKNOWN:
             default:
-                ra = routerInfo.getTargetAddress("SSU");
+                RouterAddress ra = routerInfo.getTargetAddress("SSU");
                 if (ra == null && _context.router().getUptime() > 5*60*1000) {
                     if (getActivePeers() <= 0)
                         return new NetworkStateMessage(NetworkState.ERROR, _t("ERR-No Active Peers, Check Network Connection and Firewall"));
@@ -295,7 +309,7 @@ public class SummaryHelper extends HelperBase {
                     else
                         return new NetworkStateMessage(NetworkState.WARN, _t("WARN-Firewalled with UDP Disabled"));
                 }
-                return new NetworkStateMessage(state, _t(status.toStatusString()));
+                return new NetworkStateMessage(state, txstatus);
         }
     }
 
@@ -593,11 +607,10 @@ public class SummaryHelper extends HelperBase {
                 buf.append("</a></b></td>\n");
                 LeaseSet ls = _context.netDb().lookupLeaseSetLocally(h);
                 if (ls != null && _context.tunnelManager().getOutboundClientTunnelCount(h) > 0) {
-                    long timeToExpire = ls.getEarliestLeaseDate() - _context.clock().now();
-                    if (timeToExpire < 0) {
-                        // red or yellow light
-                        buf.append("<td><img src=\"/themes/console/images/local_inprogress.png\" alt=\"").append(_t("Rebuilding")).append("&hellip;\" title=\"").append(_t("Leases expired")).append(" ").append(DataHelper.formatDuration2(0-timeToExpire));
-                        buf.append(" ").append(_t("ago")).append(". ").append(_t("Rebuilding")).append("&hellip;\"></td></tr>\n");
+                    if (!ls.isCurrent(0)) {
+                        // yellow light
+                        buf.append("<td><img src=\"/themes/console/images/local_inprogress.png\" alt=\"").append(_t("Rebuilding")).append("&hellip;\" title=\"").append(_t("Leases expired"));
+                        buf.append(", ").append(_t("Rebuilding")).append("&hellip;\"></td></tr>\n");
                     } else {
                         // green light
                         buf.append("<td><img src=\"/themes/console/images/local_up.png\" alt=\"Ready\" title=\"").append(_t("Ready")).append("\"></td></tr>\n");
@@ -642,7 +655,7 @@ public class SummaryHelper extends HelperBase {
             TunnelPoolSettings out = _context.tunnelManager().getOutboundSettings(d.calculateHash());
             name = (out != null ? out.getDestinationNickname() : null);
             if (name == null)
-                name = d.calculateHash().toBase64().substring(0,6);
+                name = d.toBase32();
             else
                 name = _t(name);
         } else {
@@ -758,7 +771,7 @@ public class SummaryHelper extends HelperBase {
     public String getTunnelStatus() {
         if (_context == null)
             return "";
-        return _context.throttle().getTunnelStatus();
+        return _context.throttle().getLocalizedTunnelStatus();
     }
 
     public String getInboundBacklog() {

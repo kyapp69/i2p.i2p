@@ -5,19 +5,21 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.StringTokenizer;
 
 import net.i2p.I2PAppContext;
+import net.i2p.data.DataHelper;
 import net.i2p.util.I2PThread;
 import net.i2p.util.Log;
 
 /**
  * Note - if no filter is defined in stat.logFilters at startup, this class will not
  * be instantiated - see StatManager.
+ *
+ * Deprecated - unused - to be removed.
+ * Not for external use - not a public API.
  */
 public class BufferedStatLog implements StatLog {
     private final I2PAppContext _context;
@@ -122,7 +124,6 @@ public class BufferedStatLog implements StatLog {
     }
     
     private class StatLogWriter implements Runnable {
-        private final SimpleDateFormat _fmt = new SimpleDateFormat("yyyyMMdd HH:mm:ss.SSS");
         public void run() {
             int writeStart = -1;
             int writeEnd = -1;
@@ -159,10 +160,7 @@ public class BufferedStatLog implements StatLog {
                 int cur = start;
                 while (cur != end) {
                     //if (shouldLog(_events[cur].getStat())) {
-                        String when = null;
-                        synchronized (_fmt) {
-                            when = _fmt.format(new Date(_events[cur].getTime()));
-                        }
+                        String when = DataHelper.formatTime(_events[cur].getTime());
                         _out.write(when);
                         _out.write(" ");
                         if (_events[cur].getScope() == null)

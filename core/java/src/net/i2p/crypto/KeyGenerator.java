@@ -13,7 +13,6 @@ import java.math.BigInteger;
 import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
-import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
 import java.security.ProviderException;
@@ -31,9 +30,12 @@ import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.Collection;
 
+import com.southernstorm.noise.crypto.x25519.Curve25519;
+
 import net.i2p.I2PAppContext;
 import net.i2p.crypto.eddsa.EdDSAPrivateKey;
 import net.i2p.crypto.eddsa.EdDSAPublicKey;
+import net.i2p.crypto.eddsa.RedKeyPairGenerator;
 import net.i2p.crypto.eddsa.spec.EdDSAPublicKeySpec;
 import net.i2p.crypto.provider.I2PProvider;
 import net.i2p.data.Hash;
@@ -157,15 +159,16 @@ public final class KeyGenerator {
         BigInteger aalpha = CryptoConstants.elgg.modPow(a, CryptoConstants.elgp);
 
         SimpleDataStructure[] keys = new SimpleDataStructure[2];
-        keys[0] = new PublicKey();
-        keys[1] = new PrivateKey();
 
         // bigInteger.toByteArray returns SIGNED integers, but since they'return positive,
         // signed two's complement is the same as unsigned
 
         try {
-            keys[0].setData(SigUtil.rectify(aalpha, PublicKey.KEYSIZE_BYTES));
-            keys[1].setData(SigUtil.rectify(a, PrivateKey.KEYSIZE_BYTES));
+            PublicKey pub = new PublicKey(SigUtil.rectify(aalpha, PublicKey.KEYSIZE_BYTES));
+            keys[0] = pub;
+            keys[1] = new PrivateKey(EncType.ELGAMAL_2048,
+                                     SigUtil.rectify(a, PrivateKey.KEYSIZE_BYTES),
+                                     pub);
         } catch (InvalidKeyException ike) {
             throw new IllegalArgumentException(ike);
         }
@@ -173,20 +176,72 @@ public final class KeyGenerator {
         return keys;
     }
 
-    /** Convert a PrivateKey to its corresponding PublicKey
+    /**
+     *  Supports EncTypes
+     *  @since 0.9.38
+     */
+    public KeyPair generatePKIKeys(EncType type) {
+        PublicKey pub;
+        PrivateKey priv;
+        switch (type) {
+          case ELGAMAL_2048:
+            SimpleDataStructure[] keys = generatePKIKeys();
+            pub = (PublicKey) keys[0];
+            priv = (PrivateKey) keys[1];
+            break;
+
+          case ECIES_X25519:
+            byte[] bpriv = new byte[32];
+            do {
+                _context.random().nextBytes(bpriv);
+                // little endian, loop if too small
+                // worth doing?
+            } while (bpriv[31] == 0);
+            byte[] bpub = new byte[32];
+            Curve25519.eval(bpub, 0, bpriv, null);
+            pub = new PublicKey(type, bpub);
+            priv = new PrivateKey(type, bpriv, pub);
+            break;
+
+          default:
+            throw new IllegalArgumentException("Unsupported algorithm");
+
+        }
+        return new KeyPair(pub, priv);
+    }
+
+    /**
+     * Convert a PrivateKey to its corresponding PublicKey.
+     * As of 0.9.38, supports EncTypes
+     *
      * @param priv PrivateKey object
      * @return the corresponding PublicKey object
      * @throws IllegalArgumentException on bad key
      */
     public static PublicKey getPublicKey(PrivateKey priv) {
-        BigInteger a = new NativeBigInteger(1, priv.toByteArray());
-        BigInteger aalpha = CryptoConstants.elgg.modPow(a, CryptoConstants.elgp);
-        PublicKey pub = new PublicKey();
-        try {
-            pub.setData(SigUtil.rectify(aalpha, PublicKey.KEYSIZE_BYTES));
-        } catch (InvalidKeyException ike) {
-            throw new IllegalArgumentException(ike);
+        EncType type = priv.getType();
+        byte[] data;
+        switch (type) {
+          case ELGAMAL_2048:
+            BigInteger a = new NativeBigInteger(1, priv.toByteArray());
+            BigInteger aalpha = CryptoConstants.elgg.modPow(a, CryptoConstants.elgp);
+            try {
+                data = SigUtil.rectify(aalpha, PublicKey.KEYSIZE_BYTES);
+            } catch (InvalidKeyException ike) {
+                throw new IllegalArgumentException(ike);
+            }
+            break;
+
+          case ECIES_X25519:
+            data = new byte[32];
+            Curve25519.eval(data, 0, priv.getData(), null);
+            break;
+
+          default:
+            throw new IllegalArgumentException("Unsupported algorithm");
+
         }
+        PublicKey pub = new PublicKey(type, data);
         return pub;
     }
 
@@ -234,9 +289,13 @@ public final class KeyGenerator {
     public SimpleDataStructure[] generateSigningKeys(SigType type) throws GeneralSecurityException {
         if (type == SigType.DSA_SHA1)
             return generateSigningKeys();
-        KeyPair kp;
+        java.security.KeyPair kp;
         if (type.getBaseAlgorithm() == SigAlgo.EdDSA) {
-            net.i2p.crypto.eddsa.KeyPairGenerator kpg = new net.i2p.crypto.eddsa.KeyPairGenerator();
+            net.i2p.crypto.eddsa.KeyPairGenerator kpg;
+            if (type == SigType.RedDSA_SHA512_Ed25519)
+                kpg = new RedKeyPairGenerator();
+            else
+                kpg = new net.i2p.crypto.eddsa.KeyPairGenerator();
             kpg.initialize(type.getParams(), _context.random());
             kp = kpg.generateKeyPair();
         } else {
@@ -413,13 +472,13 @@ public final class KeyGenerator {
         else
             System.out.println(type + " private-to-public test FAILED");
         //System.out.println("privkey " + keys[1]);
-          MessageDigest md = type.getDigestInstance();
+        MessageDigest md = type.getDigestInstance();
         for (int i = 0; i < runs; i++) {
             RandomSource.getInstance().nextBytes(src);
-              md.update(src);
-              byte[] sha = md.digest();
-              SimpleDataStructure hash = type.getHashInstance();
-              hash.setData(sha);
+            md.update(src);
+            byte[] sha = md.digest();
+            SimpleDataStructure hash = type.getHashInstance();
+            hash.setData(sha);
             long start = System.nanoTime();
             Signature sig = DSAEngine.getInstance().sign(src, privkey);
             Signature sig2 = DSAEngine.getInstance().sign(hash, privkey);
@@ -434,16 +493,18 @@ public final class KeyGenerator {
             stime += mid - start;
             vtime += end - mid;
             if (!ok)
-                throw new GeneralSecurityException(type + " V(S(data)) fail");
+                throw new GeneralSecurityException(type + " V(S(data)) fail on run " + i);
             if (!ok2)
-                throw new GeneralSecurityException(type + " V(S(H(data))) fail");
+                throw new GeneralSecurityException(type + " V(S(H(data))) fail on run" + i);
         }
         stime /= 1000*1000;
         vtime /= 1000*1000;
+        // we do two of each per run above
+        int runs2 = runs * 2;
         System.out.println(type + " sign/verify " + runs + " times: " + (vtime+stime) + " ms = " +
-                           (((double) stime) / runs) + " each sign, " +
-                           (((double) vtime) / runs) + " each verify, " +
-                           (((double) (stime + vtime)) / runs) + " s+v");
+                           (((double) stime) / runs2) + " each sign, " +
+                           (((double) vtime) / runs2) + " each verify, " +
+                           (((double) (stime + vtime)) / runs2) + " s+v");
     }
 
 /******

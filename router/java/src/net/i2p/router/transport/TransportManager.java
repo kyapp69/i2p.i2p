@@ -42,6 +42,8 @@ import net.i2p.router.transport.ntcp.NTCPTransport;
 import net.i2p.router.transport.udp.UDPTransport;
 import net.i2p.util.Addresses;
 import net.i2p.util.Log;
+import net.i2p.util.SimpleTimer;
+import net.i2p.util.SimpleTimer2;
 import net.i2p.util.SystemVersion;
 import net.i2p.util.Translate;
 import net.i2p.util.VersionComparator;
@@ -70,6 +72,9 @@ public class TransportManager implements TransportEventListener {
     private final UPnPManager _upnpManager;
     private final DHSessionKeyBuilder.PrecalcRunner _dhThread;
     private final X25519KeyFactory _xdhThread;
+    private final boolean _enableUDP;
+    private final boolean _enableNTCP1;
+    private boolean _upnpUpdateQueued;
 
     /** default true */
     public final static String PROP_ENABLE_UDP = "i2np.udp.enable";
@@ -78,6 +83,9 @@ public class TransportManager implements TransportEventListener {
     /** default true */
     public final static String PROP_ENABLE_UPNP = "i2np.upnp.enable";
 
+    /** default true */
+    private static final String PROP_NTCP1_ENABLE = "i2np.ntcp1.enable";
+    private static final boolean DEFAULT_NTCP1_ENABLE = false;
     private static final String PROP_NTCP2_ENABLE = "i2np.ntcp2.enable";
     private static final boolean DEFAULT_NTCP2_ENABLE = true;
 
@@ -102,9 +110,12 @@ public class TransportManager implements TransportEventListener {
             _upnpManager = new UPnPManager(context, this);
         else
             _upnpManager = null;
-        _dhThread = new DHSessionKeyBuilder.PrecalcRunner(context);
+        _enableUDP = _context.getBooleanPropertyDefaultTrue(PROP_ENABLE_UDP);
+        _enableNTCP1 = isNTCPEnabled(context) &&
+                       context.getProperty(PROP_NTCP1_ENABLE, DEFAULT_NTCP1_ENABLE);
         boolean enableNTCP2 = isNTCPEnabled(context) &&
                               context.getProperty(PROP_NTCP2_ENABLE, DEFAULT_NTCP2_ENABLE);
+        _dhThread = (_enableUDP || enableNTCP2) ? new DHSessionKeyBuilder.PrecalcRunner(context) : null;
         _xdhThread = enableNTCP2 ? new X25519KeyFactory(context) : null;
     }
 
@@ -149,6 +160,7 @@ public class TransportManager implements TransportEventListener {
     /**
      *  Hook for pluggable transport creation.
      *
+     *  @return null if both NTCP1 and SSU are disabled
      *  @since 0.9.16
      */
     DHSessionKeyBuilder.Factory getDHFactory() {
@@ -172,21 +184,26 @@ public class TransportManager implements TransportEventListener {
     }
 
     private void configTransports() {
-        boolean enableUDP = _context.getBooleanPropertyDefaultTrue(PROP_ENABLE_UDP);
         Transport udp = null;
-        if (enableUDP) {
+        if (_enableUDP) {
             udp = new UDPTransport(_context, _dhThread);
             addTransport(udp);
             initializeAddress(udp);
         }
         if (isNTCPEnabled(_context)) {
-            Transport ntcp = new NTCPTransport(_context, _dhThread, _xdhThread);
+            DHSessionKeyBuilder.PrecalcRunner dh = _enableNTCP1 ? _dhThread : null;
+            Transport ntcp = new NTCPTransport(_context, dh, _xdhThread);
             addTransport(ntcp);
             initializeAddress(ntcp);
             if (udp != null) {
                 // pass along the port SSU is probably going to use
                 // so that NTCP may bind early
                 int port = udp.getRequestedPort();
+                if (port > 0)
+                    ntcp.externalAddressReceived(SOURCE_CONFIG, (byte[]) null, port);
+            } else {
+                // SSU disabled
+                int port = ntcp.getRequestedPort();
                 if (port > 0)
                     ntcp.externalAddressReceived(SOURCE_CONFIG, (byte[]) null, port);
             }
@@ -224,52 +241,84 @@ public class TransportManager implements TransportEventListener {
     private void initializeAddress(Collection<Transport> ts) {
         if (ts.isEmpty())
             return;
-        Set<String> ipset = Addresses.getAddresses(false, true);  // non-local, include IPv6
+        // non-local (unless test mode), don't include loopback, include IPv6
+        Set<String> ipset = Addresses.getAddresses(_context.getBooleanProperty("i2np.allowLocal"), false, true);
+        String lastv4 = _context.getProperty(UDPTransport.PROP_IP);
+        String lastv6 = _context.getProperty(UDPTransport.PROP_IPV6);
+        boolean preferTemp = _context.getBooleanProperty(UDPTransport.PROP_LAPTOP_MODE);
         //
-        // Avoid IPv6 temporary addresses if we have a non-temporary one
+        // Avoid IPv6 temporary addresses if we have a non-temporary one,
+        // unless laptop mode
         //
-        boolean hasNonTempV6Address = false;
+        boolean hasPreferredV6Address = false;
         List<InetAddress> addresses = new ArrayList<InetAddress>(4);
-        List<Inet6Address> tempV6Addresses = new ArrayList<Inet6Address>(4);
+        List<Inet6Address> nonPreferredV6Addresses = new ArrayList<Inet6Address>(4);
         for (String ips : ipset) {
             try {
                 InetAddress addr = InetAddress.getByName(ips);
                 if (ips.contains(":") && (addr instanceof Inet6Address)) {
                     Inet6Address v6addr = (Inet6Address) addr;
                     // getAddresses(false, true) will not return deprecated addresses
-                    //if (Addresses.isDeprecated(v6addr)) {
-                    //    if (_log.shouldWarn())
-                    //        _log.warn("Not binding to deprecated temporary address " + bt);
-                    //    continue;
-                    //}
-                    if (Addresses.isTemporary(v6addr)) {
-                        // Save temporary addresses
-                        // we only use these if we don't have a non-temporary adress
-                        tempV6Addresses.add(v6addr);
-                        continue;
+                    boolean isTemp = Addresses.isTemporary(v6addr);
+                    if (preferTemp) {
+                        if (!isTemp) {
+                            // Save permanent addresses
+                            // we only use these if we don't have a temporary address,
+                            nonPreferredV6Addresses.add(v6addr);
+                            continue;
+                        }
+                    } else {
+                        if (isTemp && !ips.equals(lastv6)) {
+                            // Save temporary addresses
+                            // we only use these if we don't have a permanent address,
+                            // unless it's the last IP we used
+                            nonPreferredV6Addresses.add(v6addr);
+                            continue;
+                        }
                     }
-                    hasNonTempV6Address = true;
+                    hasPreferredV6Address = true;
                 }
-                addresses.add(addr);
+                // put previously used addresses at the front of the list
+                if (ips.equals(lastv4) || ips.equals(lastv6))
+                    addresses.add(0, addr);
+                else
+                    addresses.add(addr);
             } catch (UnknownHostException e) {
                 _log.error("UDP failed to bind to local address", e);
             }
         }
-        // we only use these if we don't have a non-temporary adress
-        if (!tempV6Addresses.isEmpty()) {
-            if (hasNonTempV6Address) {
+        // we only use these if we don't have a preferred adress
+        if (!nonPreferredV6Addresses.isEmpty()) {
+            if (hasPreferredV6Address) {
                 if (_log.shouldWarn()) {
-                    for (Inet6Address addr : tempV6Addresses) {
-                        _log.warn("Not binding to temporary address " + addr.getHostAddress());
+                    for (Inet6Address addr : nonPreferredV6Addresses) {
+                        _log.warn("Not binding to address " + addr.getHostAddress());
                     }
                 }
             } else {
-                addresses.addAll(tempV6Addresses);
+                addresses.addAll(nonPreferredV6Addresses);
+            }
+        }
+        if (_log.shouldWarn()) {
+            for (InetAddress ia : addresses) {
+                _log.warn("Transport address: " + ia.getHostAddress());
             }
         }
         for (Transport t : ts) {
+            // the transports really don't like being called with more than one of each
+            boolean hasv4 = false;
+            boolean hasv6 = false;
             for (InetAddress ia : addresses) {
                 byte[] ip = ia.getAddress();
+                if (ip.length == 4) {
+                    if (hasv4)
+                        continue;
+                    hasv4 = true;
+                } else {
+                    if (hasv6)
+                        continue;
+                    hasv6 = true;
+                }
                 t.externalAddressReceived(SOURCE_INTERFACE, ip, 0);
             }
         }
@@ -315,7 +364,7 @@ public class TransportManager implements TransportEventListener {
     }
 
     synchronized void startListening() {
-        if (_dhThread.getState() == Thread.State.NEW)
+        if (_dhThread != null && _dhThread.getState() == Thread.State.NEW)
             _dhThread.start();
         if (_xdhThread != null && _xdhThread.getState() == Thread.State.NEW)
             _xdhThread.start();
@@ -324,7 +373,10 @@ public class TransportManager implements TransportEventListener {
         // Maybe we need a config option to force on? Probably not.
         // What firewall supports UPnP and is configured with a public address on the LAN side?
         // Unlikely.
-        if (_upnpManager != null && Addresses.getAnyAddress() == null)
+        // Always start on Android, as we may have a cellular IPv4 address but
+        // are routing all traffic through WiFi.
+        // Also, conditions may change rapidly.
+        if (_upnpManager != null && (SystemVersion.isAndroid() || Addresses.getAnyAddress() == null))
             _upnpManager.start();
         configTransports();
         _log.debug("Starting up the transport manager");
@@ -377,7 +429,10 @@ public class TransportManager implements TransportEventListener {
      */
     synchronized void shutdown() {
         stopListening();
-        _dhThread.shutdown();
+        if (_dhThread != null)
+            _dhThread.shutdown();
+        if (_xdhThread != null)
+            _xdhThread.shutdown();
         Addresses.clearCaches();
         TransportImpl.clearCaches();
     }
@@ -556,6 +611,17 @@ public class TransportManager implements TransportEventListener {
     }
     
     /**
+     * Tell the transports to disconnect from this peer.
+     *
+     * @since 0.9.38
+     */
+    void forceDisconnect(Hash peer) {
+        for (Transport t : _transports.values()) {
+             t.forceDisconnect(peer);
+        }
+    }
+    
+    /**
      * Was the peer UNreachable (outbound only) on any transport,
      * based on the last time we tried it for each transport?
      * This is NOT reset if the peer contacts us.
@@ -638,7 +704,7 @@ public class TransportManager implements TransportEventListener {
                 _context.getBooleanProperty(NTCPTransport.PROP_I2NP_NTCP_AUTO_PORT)) {
                 Transport udp = getTransport(UDPTransport.STYLE);
                 if (udp != null)
-                    port = t.getRequestedPort();
+                    port = udp.getRequestedPort();
             }
             if (port > 0)
                 rv.add(new Port(t.getStyle(), port));
@@ -783,9 +849,32 @@ public class TransportManager implements TransportEventListener {
      */
     public void transportAddressChanged() {
         if (_upnpManager != null) {
-            _upnpManager.rescan();
-            // should really delay the following by 5 seconds?
-            _upnpManager.update(getPorts());
+            synchronized (_upnpManager) {
+                if (!_upnpUpdateQueued) {
+                    boolean shouldWait = _upnpManager.rescan();
+                    if (shouldWait) {
+                        // Delay until the rescan finishes, MX time + 250
+                        _upnpUpdateQueued = true;
+                        _context.simpleTimer2().addEvent(new UpdatePorts(), 3250);
+                    } else {
+                        _upnpManager.update(getPorts());
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Delayed update of UPnP ports
+     *
+     * @since 0.9.39
+     */
+    private class UpdatePorts implements SimpleTimer.TimedEvent {
+        public void timeReached() {
+            synchronized (_upnpManager) {
+                _upnpUpdateQueued = false;
+                _upnpManager.update(getPorts());
+            }
         }
     }
 

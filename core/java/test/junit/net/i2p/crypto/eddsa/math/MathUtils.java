@@ -1,3 +1,14 @@
+/**
+ * EdDSA-Java by str4d
+ *
+ * To the extent possible under law, the person who associated CC0 with
+ * EdDSA-Java has waived all copyright and related or neighboring rights
+ * to EdDSA-Java.
+ *
+ * You should have received a copy of the CC0 legalcode along with this
+ * work. If not, see <https://creativecommons.org/publicdomain/zero/1.0/>.
+ *
+ */
 package net.i2p.crypto.eddsa.math;
 
 import net.i2p.crypto.eddsa.Utils;
@@ -157,7 +168,7 @@ public class MathUtils {
     }
 
     /**
-     * Gets a random field element where |t[i]| <= 2^24 for 0 <= i <= 9.
+     * Gets a random field element where |t[i]| &lt;= 2^24 for 0 &lt;= i &lt;= 9.
      *
      * @return The field element.
      */

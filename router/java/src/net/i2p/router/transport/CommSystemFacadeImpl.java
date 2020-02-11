@@ -32,6 +32,7 @@ import net.i2p.util.I2PThread;
 import net.i2p.util.Log;
 import net.i2p.util.SimpleTimer;
 import net.i2p.util.SimpleTimer2;
+import net.i2p.util.SystemVersion;
 import net.i2p.util.Translate;
 
 public class CommSystemFacadeImpl extends CommSystemFacade {
@@ -47,6 +48,9 @@ public class CommSystemFacadeImpl extends CommSystemFacade {
      *  @since IPv6
      */
     private static final String PROP_DISABLED = "i2np.disable";
+
+    private static final String BUNDLE_NAME = "net.i2p.router.web.messages";
+    private static final String COUNTRY_BUNDLE_NAME = "net.i2p.router.countries.messages";
     
     public CommSystemFacadeImpl(RouterContext context) {
         _context = context;
@@ -55,7 +59,6 @@ public class CommSystemFacadeImpl extends CommSystemFacade {
         _netMonitorStatus = true;
         _geoIP = new GeoIP(_context);
         _manager = new TransportManager(_context);
-        startGeoIP();
     }
     
     public synchronized void startup() {
@@ -195,6 +198,16 @@ public class CommSystemFacadeImpl extends CommSystemFacade {
         _manager.mayDisconnect(peer); 
     }
     
+    /**
+     * Tell the comm system to disconnect from this peer.
+     *
+     * @since 0.9.38
+     */
+    @Override
+    public void forceDisconnect(Hash peer) {
+        _manager.forceDisconnect(peer); 
+    }
+    
     @Override
     public List<String> getMostRecentErrorMessages() { 
         return _manager.getMostRecentErrorMessages(); 
@@ -211,6 +224,15 @@ public class CommSystemFacadeImpl extends CommSystemFacade {
         if (rv != Status.HOSED && _context.router().isHidden())
             return Status.OK;
         return rv; 
+    }
+
+    /**
+     * getStatus().toStatusString(), translated if available.
+     * @since 0.9.45
+     */
+    @Override
+    public String getLocalizedStatusString() {
+        return Translate.getString(getStatus().toStatusString(), _context, ROUTER_BUNDLE_NAME);
     }
 
     /**
@@ -353,8 +375,17 @@ public class CommSystemFacadeImpl extends CommSystemFacade {
      * tunnel selection, banlisting, etc.
      */
 
+    /**
+     *  Router must call after netdb is initialized
+     *  @since 0.9.41
+     */
+    @Override
+    public void initGeoIP() {
+        startGeoIP();
+    }
+
     /* We hope the routerinfos are read in and things have settled down by now, but it's not required to be so */
-    private static final int START_DELAY = 5*60*1000;
+    private static final int START_DELAY = SystemVersion.isSlow() ? 5*60*1000 : 5*1000;
     private static final int LOOKUP_TIME = 30*60*1000;
 
     private void startGeoIP() {
@@ -407,6 +438,9 @@ public class CommSystemFacadeImpl extends CommSystemFacade {
         }
     }
 
+    /**
+     *  @param ip ipv4 or ipv6
+     */
     @Override
     public void queueLookup(byte[] ip) {
         _geoIP.add(ip);
@@ -422,43 +456,48 @@ public class CommSystemFacadeImpl extends CommSystemFacade {
     }
 
     /**
-     *  Are we in a bad place
+     *  Are we in a strict country
      *  @since 0.8.13
      */
     @Override
-    public boolean isInBadCountry() {
+    public boolean isInStrictCountry() {
         String us = getOurCountry();
-        return (us != null && BadCountries.contains(us)) || _context.getBooleanProperty("router.forceBadCountry");
+        return (us != null && StrictCountries.contains(us)) || _context.getBooleanProperty("router.forceStrictCountry");
     }
 
     /**
-     *  Are they in a bad place
+     *  Are they in a strict country.
+     *  Not recommended for our local router hash, as we may not be either in the cache or netdb,
+     *  or may not be publishing an IP.
+     *
      *  @param peer non-null
      *  @since 0.9.16
      */
     @Override
-    public boolean isInBadCountry(Hash peer) {
+    public boolean isInStrictCountry(Hash peer) {
         String c = getCountry(peer);
-        return c != null && BadCountries.contains(c);
+        return c != null && StrictCountries.contains(c);
     }
 
     /**
-     *  Are they in a bad place
+     *  Are they in a strict country
      *  @param ri non-null
      *  @since 0.9.16
      */
     @Override
-    public boolean isInBadCountry(RouterInfo ri) {
+    public boolean isInStrictCountry(RouterInfo ri) {
         byte[] ip = getIP(ri);
         if (ip == null)
             return false;
         String c = _geoIP.get(ip);
-        return c != null && BadCountries.contains(c);
+        return c != null && StrictCountries.contains(c);
     }
 
     /**
      *  Uses the transport IP first because that lookup is fast,
      *  then the IP from the netDb.
+     *  Not recommended for our local router hash, as we may not be either in the cache or netdb,
+     *  or may not be publishing an IP.
      *
      *  As of 0.9.32, works only for literal IPs, returns null for host names.
      *
@@ -525,9 +564,6 @@ public class CommSystemFacadeImpl extends CommSystemFacade {
             return c;
         return n;
     }
-
-    private static final String BUNDLE_NAME = "net.i2p.router.web.messages";
-    private static final String COUNTRY_BUNDLE_NAME = "net.i2p.router.countries.messages";
 
     /** Provide a consistent "look" for displaying router IDs in the console */
     @Override
@@ -625,7 +661,7 @@ public class CommSystemFacadeImpl extends CommSystemFacade {
         }
 
         public void timeReached() {
-             boolean good = Addresses.isConnected();
+             boolean good = Addresses.isConnected() || Addresses.isConnectedIPv6();
              if (_netMonitorStatus != good) {
                  if (good)
                      _log.logAlways(Log.INFO, "Network reconnected");

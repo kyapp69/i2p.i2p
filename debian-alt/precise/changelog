@@ -1,3 +1,57 @@
+i2p (0.9.44p-1~precise+1) precise; urgency=medium
+
+  * Backport to Precise
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Sun, 01 Dec 2019 12:12:12 +0000
+
+i2p (0.9.43p-1~precise+1) precise; urgency=medium
+
+  * Backport to Precise
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Tue, 22 Oct 2019 12:12:12 +0000
+
+i2p (0.9.42p-1~precise+1) precise; urgency=medium
+
+  * Backport to Precise
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 28 Aug 2019 12:12:12 +0000
+
+i2p (0.9.41p-1~precise+1) precise; urgency=medium
+
+  * Backport to Precise
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 3 Jul 2019 12:12:12 +0000
+
+i2p (0.9.40p-1~precise+1) precise; urgency=medium
+
+  * Backport to Precise
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 8 May 2019 12:12:12 +0000
+
+i2p (0.9.39p-1~precise+1) precise; urgency=medium
+
+  * Backport to Precise
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Fri, 22 Mar 2019 12:12:12 +0000
+
+i2p (0.9.38p-2~precise+1) precise; urgency=medium
+
+  * Fix broken build
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Sat, 26 Jan 2019 12:12:12 +0000
+
+i2p (0.9.38p-1~precise+1) precise; urgency=medium
+
+  * Backport to Precise
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 23 Jan 2019 12:12:12 +0000
+
+i2p (0.9.37p-1~precise+1) precise; urgency=medium
+
+  * Backport to Precise
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 05 Oct 2018 12:12:12 +0000
+
 i2p (0.9.36p-1~precise+1) precise; urgency=medium
 
   * Backport to Precise

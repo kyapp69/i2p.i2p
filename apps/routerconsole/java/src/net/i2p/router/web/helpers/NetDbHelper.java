@@ -1,24 +1,35 @@
 package net.i2p.router.web.helpers;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Locale;
+import java.util.Map;
 
 import net.i2p.crypto.SigType;
 import net.i2p.data.DataHelper;
 import net.i2p.util.SystemVersion;
-import net.i2p.router.web.HelperBase;
+import net.i2p.router.sybil.Analysis;
+import net.i2p.router.web.FormHandler;
 
-public class NetDbHelper extends HelperBase {
+/**
+ *  /netdb
+ *  A FormHandler since 0.9.38.
+ *  Most output is generated in NetDbRenderer and SybilRender.
+ */
+public class NetDbHelper extends FormHandler {
     private String _routerPrefix;
     private String _version;
     private String _country;
     private String _family, _caps, _ip, _sybil, _mtu, _ssucaps, _ipv6, _transport;
-    private int _full, _port, _cost, _page;
+    private int _full, _port, _cost, _page, _mode;
+    private long _date;
     private int _limit = DEFAULT_LIMIT;
     private boolean _lease;
     private boolean _debug;
     private boolean _graphical;
     private SigType _type;
+    private String _newNonce;
+    private boolean _postOK;
 
     private static final int DEFAULT_LIMIT = SystemVersion.isARM() ? 250 : 500;
     private static final int DEFAULT_PAGE = 0;
@@ -27,10 +38,11 @@ public class NetDbHelper extends HelperBase {
                                           {_x("Summary"),                       // 0
                                            _x("Local Router"),                  // 1
                                            _x("Router Lookup"),                 // 2
+                                           // advanced below here
                                            _x("All Routers"),                   // 3
                                            _x("All Routers with Full Stats"),   // 4
-                                           "LeaseSet Debug",                    // 5
-                                           _x("LeaseSets"),                     // 6
+                                           _x("LeaseSets"),                     // 5
+                                           "LeaseSet Debug",                    // 6
                                            "Sybil",                             // 7
                                            "Advanced Lookup"   };               // 8
 
@@ -40,8 +52,8 @@ public class NetDbHelper extends HelperBase {
                                            "",                                  // 2
                                            "?f=2",                              // 3
                                            "?f=1",                              // 4
-                                           "?l=2",                              // 5
-                                           "?l=1",                              // 6
+                                           "?l=1",                              // 5
+                                           "?l=2",                              // 6
                                            "?f=3",                              // 7
                                            "?f=4" };                            // 8
 
@@ -141,6 +153,20 @@ public class NetDbHelper extends HelperBase {
         } catch (NumberFormatException nfe) {}
     }
 
+    /** @since 0.9.38 */
+    public void setMode(String f) {
+        try {
+            _mode = Integer.parseInt(f);
+        } catch (NumberFormatException nfe) {}
+    }
+
+    /** @since 0.9.38 */
+    public void setDate(String f) {
+        try {
+            _date = Long.parseLong(f);
+        } catch (NumberFormatException nfe) {}
+    }
+
     public void setFull(String f) {
         try {
             _full = Integer.parseInt(f);
@@ -179,6 +205,61 @@ public class NetDbHelper extends HelperBase {
     public void allowGraphical() {
         _graphical = true;
     }
+    
+    /**
+     *  Override to save it
+     *  @since 0.9.38
+     */
+    @Override
+    public String getNewNonce() {
+        _newNonce = super.getNewNonce();
+        return _newNonce;
+    }
+
+    /**
+     *  Now we're a FormHandler
+     *  @since 0.9.38
+     */
+    protected void processForm() {
+        _postOK = "Run new analysis".equals(_action) ||
+                  "Review analysis".equals(_action);
+        if ("Save".equals(_action)) {
+                try {
+                    Map<String, String> toSave = new HashMap<String, String>(4);
+                    String newTime = getJettyString("runFrequency");
+                    if (newTime != null) {
+                        long ntime = Long.parseLong(newTime) * 60*60*1000;
+                        toSave.put(Analysis.PROP_FREQUENCY, Long.toString(ntime));
+                    }
+                    String thresh = getJettyString("threshold");
+                    if (thresh != null && thresh.length() > 0) {
+                        float val = Math.max(Float.parseFloat(thresh), Analysis.MIN_BLOCK_POINTS);
+                        toSave.put(Analysis.PROP_THRESHOLD, Float.toString(val));
+                    }
+                    String days = getJettyString("days");
+                    if (days != null && days.length() > 0) {
+                        long val = 24*60*60*1000L * Integer.parseInt(days);
+                        toSave.put(Analysis.PROP_BLOCKTIME, Long.toString(val));
+                    }
+                    String age = getJettyString("deleteAge");
+                    if (age != null && age.length() > 0) {
+                        long val = 24*60*60*1000L * Integer.parseInt(age);
+                        toSave.put(Analysis.PROP_REMOVETIME, Long.toString(val));
+                    }
+                    String enable = getJettyString("block");
+                    toSave.put(Analysis.PROP_BLOCK, Boolean.toString(enable != null));
+                    String nonff = getJettyString("nonff");
+                    toSave.put(Analysis.PROP_NONFF, Boolean.toString(nonff != null));
+                    if (_context.router().saveConfig(toSave, null))
+                        addFormNotice(_t("Configuration saved successfully."));
+                    else
+                        addFormError("Error saving the configuration (applied but not saved) - please see the error logs");
+                    Analysis.getInstance(_context).schedule();
+                } catch (NumberFormatException nfe) {
+                        addFormError("bad value");
+                }
+        }
+    }
 
     /**
      *   storeWriter() must be called previously
@@ -190,19 +271,24 @@ public class NetDbHelper extends HelperBase {
             if (_routerPrefix != null || _version != null || _country != null ||
                 _family != null || _caps != null || _ip != null || _sybil != null ||
                 _port != 0 || _type != null || _mtu != null || _ipv6 != null ||
-                _ssucaps != null || _transport != null || _cost != 0)
+                _ssucaps != null || _transport != null || _cost != 0) {
                 renderer.renderRouterInfoHTML(_out, _limit, _page,
                                               _routerPrefix, _version, _country,
                                               _family, _caps, _ip, _sybil, _port, _type,
                                               _mtu, _ipv6, _ssucaps, _transport, _cost);
-            else if (_lease)
+            } else if (_lease) {
                 renderer.renderLeaseSetHTML(_out, _debug);
-            else if (_full == 3)
-                (new SybilRenderer(_context)).getNetDbSummary(_out);
-            else if (_full == 4)
+            } else if (_full == 3) {
+                if (_mode == 12 && !_postOK)
+                    _mode = 0;
+                else if ((_mode == 13 || _mode == 16) && !_postOK)
+                    _mode = 14;
+                (new SybilRenderer(_context)).getNetDbSummary(_out, _newNonce, _mode, _date);
+            } else if (_full == 4) {
                 renderLookupForm();
-            else
+            } else {
                 renderer.renderStatusHTML(_out, _limit, _page, _full);
+            }
         } catch (IOException ioe) {
             ioe.printStackTrace();
         }
@@ -214,15 +300,15 @@ public class NetDbHelper extends HelperBase {
      */
     private int getTab() {
         if (_debug)
-            return 5;
-        if (_lease)
             return 6;
+        if (_lease)
+            return 5;
         if (".".equals(_routerPrefix))
             return 1;
         if (_routerPrefix != null || _version != null || _country != null ||
             _family != null || _caps != null || _ip != null || _sybil != null ||
             _port != 0 || _type != null || _mtu != null || _ipv6 != null ||
-            _ssucaps != null || _cost != 0)
+            _ssucaps != null || _transport != null || _cost != 0)
             return 2;
         if (_full == 2)
             return 3;
@@ -248,7 +334,7 @@ public class NetDbHelper extends HelperBase {
         for (int i = 0; i < titles.length; i++) {
             if (i == 2 && tab != 2)
                 continue;   // can't nav to lookup
-            if ((i == 5 || i == 7 || i == 8) && !_context.getBooleanProperty(PROP_ADVANCED))
+            if (i > 2 && i != tab && !isAdvanced())
                 continue;
             if (i == tab) {
                 // we are there
@@ -276,7 +362,8 @@ public class NetDbHelper extends HelperBase {
      *  @since 0.9.28
      */
     private void renderLookupForm() throws IOException {
-        _out.write("<form action=\"/netdb\" method=\"GET\">\n" + 
+        _out.write("<form action=\"/netdb\" method=\"POST\">\n" + 
+                   "<input type=\"hidden\" name=\"nonce\" value=\"" + _newNonce + "\" >\n" +
                    "<table id=\"netdblookup\"><tr><th colspan=\"3\">Network Database Search</th></tr>\n" +
                    "<tr><td colspan=\"3\" class=\"subheading\"><b>Enter one search field <i>only</i>:</b></td></tr>\n" +
                    "<tr><td>Capabilities:</td><td><input type=\"text\" name=\"caps\"></td><td>e.g. f or XOfR</td></tr>\n" +

@@ -13,13 +13,16 @@ import java.util.Date;
 
 import net.i2p.data.DatabaseEntry;
 import net.i2p.data.Hash;
+import net.i2p.data.Lease;
 import net.i2p.data.LeaseSet;
+import net.i2p.data.LeaseSet2;
 import net.i2p.data.TunnelId;
 import net.i2p.data.router.RouterAddress;
 import net.i2p.data.router.RouterIdentity;
 import net.i2p.data.router.RouterInfo;
 import net.i2p.data.i2np.DatabaseStoreMessage;
 import net.i2p.data.i2np.DeliveryStatusMessage;
+import net.i2p.data.i2np.I2NPMessage;
 import net.i2p.data.i2np.TunnelGatewayMessage;
 import net.i2p.router.Job;
 import net.i2p.router.JobImpl;
@@ -33,7 +36,7 @@ import net.i2p.util.Log;
  * Receive DatabaseStoreMessage data and store it in the local net db
  *
  */
-public class HandleFloodfillDatabaseStoreMessageJob extends JobImpl {
+class HandleFloodfillDatabaseStoreMessageJob extends JobImpl {
     private final Log _log;
     private final DatabaseStoreMessage _message;
     private final RouterIdentity _from;
@@ -69,7 +72,8 @@ public class HandleFloodfillDatabaseStoreMessageJob extends JobImpl {
         RouterInfo prevNetDb = null;
         Hash key = _message.getKey();
         DatabaseEntry entry = _message.getEntry();
-        if (entry.getType() == DatabaseEntry.KEY_TYPE_LEASESET) {
+        int type = entry.getType();
+        if (DatabaseEntry.isLeaseSet(type)) {
             getContext().statManager().addRateData("netDb.storeLeaseSetHandled", 1);
             if (_log.shouldLog(Log.INFO))
                 _log.info("Handling dbStore of leaseset " + _message);
@@ -112,10 +116,19 @@ public class HandleFloodfillDatabaseStoreMessageJob extends JobImpl {
                 } else if (match.getEarliestLeaseDate() < ls.getEarliestLeaseDate()) {
                     wasNew = true;
                     // If it is in our keyspace and we are talking to it
-
-
                     if (match.getReceivedAsPublished())
                         ls.setReceivedAsPublished(true);
+                } else if (type != DatabaseEntry.KEY_TYPE_LEASESET &&
+                           match.getType() != DatabaseEntry.KEY_TYPE_LEASESET) {
+                    LeaseSet2 ls2 = (LeaseSet2) ls;
+                    LeaseSet2 match2 = (LeaseSet2) match;
+                    if (match2.getPublished() < ls2.getPublished()) {
+                        wasNew = true;
+                        if (match.getReceivedAsPublished())
+                            ls.setReceivedAsPublished(true);
+                    } else {
+                        wasNew = false;
+                    }
                 } else {
                     wasNew = false;
                     // The FloodOnlyLookupSelector goes away after the first good reply
@@ -135,7 +148,7 @@ public class HandleFloodfillDatabaseStoreMessageJob extends JobImpl {
             } catch (IllegalArgumentException iae) {
                 invalidMessage = iae.getMessage();
             }
-        } else if (entry.getType() == DatabaseEntry.KEY_TYPE_ROUTERINFO) {
+        } else if (type == DatabaseEntry.KEY_TYPE_ROUTERINFO) {
             RouterInfo ri = (RouterInfo) entry;
             getContext().statManager().addRateData("netDb.storeRouterInfoHandled", 1);
             if (_log.shouldLog(Log.INFO))
@@ -181,7 +194,7 @@ public class HandleFloodfillDatabaseStoreMessageJob extends JobImpl {
             }
         } else {
             if (_log.shouldLog(Log.ERROR))
-                _log.error("Invalid DatabaseStoreMessage data type - " + entry.getType() 
+                _log.error("Invalid DatabaseStoreMessage data type - " + type
                            + ": " + _message);
             // don't ack or flood
             return;
@@ -227,7 +240,7 @@ public class HandleFloodfillDatabaseStoreMessageJob extends JobImpl {
                     return;
                 }
                 long floodBegin = System.currentTimeMillis();
-                _facade.flood(_message.getEntry());
+                _facade.flood(entry);
                 // ERR: see comment in HandleDatabaseLookupMessageJob regarding hidden mode
                 //else if (!_message.getRouterInfo().isHidden())
                 long floodEnd = System.currentTimeMillis();
@@ -251,7 +264,7 @@ public class HandleFloodfillDatabaseStoreMessageJob extends JobImpl {
         TunnelId replyTunnel = _message.getReplyTunnel();
         // A store of our own RI, only if we are not FF
         DatabaseStoreMessage msg2;
-        if ((getContext().netDb().floodfillEnabled() && !getContext().router().gracefulShutdownInProgress()) ||
+        if (getContext().netDb().floodfillEnabled() ||
             storedKey.equals(getContext().routerHash())) {
             // don't send our RI if the store was our RI (from PeerTestJob)
             msg2 = null;
@@ -282,14 +295,93 @@ public class HandleFloodfillDatabaseStoreMessageJob extends JobImpl {
                 tgm2.setMessageExpiration(msg.getMessageExpiration());
                 getContext().tunnelDispatcher().dispatch(tgm2);
             }
-        } else if (toUs || getContext().commSystem().isEstablished(toPeer)) {
+            return;
+        }
+        if (toUs) {
             Job send = new SendMessageDirectJob(getContext(), msg, toPeer, REPLY_TIMEOUT, MESSAGE_PRIORITY);
             send.runJob();
             if (msg2 != null) {
                 Job send2 = new SendMessageDirectJob(getContext(), msg2, toPeer, REPLY_TIMEOUT, MESSAGE_PRIORITY);
                 send2.runJob();
             }
-        } else {
+            return;
+        }
+        boolean isEstab = getContext().commSystem().isEstablished(toPeer);
+        if (!isEstab && replyTunnel != null) {
+            DatabaseEntry entry = _message.getEntry();
+            int type = entry.getType();
+            if (type == DatabaseEntry.KEY_TYPE_LEASESET || type == DatabaseEntry.KEY_TYPE_LS2) {
+                // As of 0.9.42,
+                // if reply GW and tunnel are in the LS, we can pick a different one from the LS,
+                // so look for one that's connected to reduce connections
+                LeaseSet ls = (LeaseSet) entry;
+                int count = ls.getLeaseCount();
+                if (count > 1) {
+                    boolean found = false;
+                    for (int i = 0; i < count; i++) {
+                        Lease lease = ls.getLease(i);
+                        if (lease.getGateway().equals(toPeer) && lease.getTunnelId().equals(replyTunnel)) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) {
+                        //_log.warn("Looking for alternate to " + toPeer + " reply gw in LS with " + count + " leases");
+                        for (int i = 0; i < count; i++) {
+                            Lease lease = ls.getLease(i);
+                            Hash gw = lease.getGateway();
+                            if (gw.equals(toPeer))
+                                continue;
+                            if (lease.isExpired())
+                                continue;
+                            if (getContext().commSystem().isEstablished(gw)) {
+                                // switch to use this lease instead
+                                toPeer = gw;
+                                replyTunnel = lease.getTunnelId();
+                                isEstab = true;
+                                break;
+                            }
+                        }
+                        if (_log.shouldWarn()) {
+                            if (isEstab)
+                                _log.warn("Switched to alt connected peer " + toPeer + " in LS with " + count + " leases");
+                            else
+                                _log.warn("Alt connected peer not found in LS with " + count + " leases");
+                        }
+                    } else {
+                        if (_log.shouldWarn())
+                            _log.warn("Reply gw not found in LS with " + count + " leases");
+                    }
+                }
+            }
+        }
+        if (isEstab) {
+            I2NPMessage out1 = msg;
+            I2NPMessage out2 = msg2;
+            if (replyTunnel != null) {
+                // wrap reply in a TGM
+                TunnelGatewayMessage tgm = new TunnelGatewayMessage(getContext());
+                tgm.setMessage(msg);
+                tgm.setTunnelId(replyTunnel);
+                tgm.setMessageExpiration(msg.getMessageExpiration());
+                out1 = tgm;
+                if (out2 != null) {
+                    TunnelGatewayMessage tgm2 = new TunnelGatewayMessage(getContext());
+                    tgm2.setMessage(msg2);
+                    tgm2.setTunnelId(replyTunnel);
+                    tgm2.setMessageExpiration(msg.getMessageExpiration());
+                    out2 = tgm2;
+                }
+            }
+            Job send = new SendMessageDirectJob(getContext(), out1, toPeer, REPLY_TIMEOUT, MESSAGE_PRIORITY);
+            send.runJob();
+            if (msg2 != null) {
+                Job send2 = new SendMessageDirectJob(getContext(), out2, toPeer, REPLY_TIMEOUT, MESSAGE_PRIORITY);
+                send2.runJob();
+            }
+            return;
+        }
+
             // pick tunnel with endpoint closest to toPeer
             TunnelInfo outTunnel = getContext().tunnelManager().selectOutboundExploratoryTunnel(toPeer);
             if (outTunnel == null) {
@@ -302,7 +394,6 @@ public class HandleFloodfillDatabaseStoreMessageJob extends JobImpl {
             if (msg2 != null)
                 getContext().tunnelDispatcher().dispatchOutbound(msg2, outTunnel.getSendTunnelId(0),
                                                                  replyTunnel, toPeer);
-        }
     }
  
     public String getName() { return "Handle Database Store Message"; }

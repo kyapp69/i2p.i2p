@@ -24,6 +24,8 @@ abstract class LogWriter implements Runnable {
     final static long FLUSH_INTERVAL = 29 * 1000;
     private final static long MIN_FLUSH_INTERVAL = 2*1000;
     private final static long MAX_FLUSH_INTERVAL = 5*60*1000;
+    // true for newest first on /logs page; false for oldest first
+    private static final boolean BUFFER_DISPLAYED_REVERSE = false;
     private long _lastReadConfig;
     protected final LogManager _manager;
 
@@ -137,11 +139,11 @@ abstract class LogWriter implements Runnable {
      *  @since 0.9.21
      */
     private void writeDupMessage(int dupCount, LogRecord lastRecord) {
-        String dmsg = dupMessage(dupCount, lastRecord, false);
+        String dmsg = dupMessage(dupCount, lastRecord, false, false);
         writeRecord(lastRecord.getPriority(), dmsg);
         if (_manager.getDisplayOnScreenLevel() <= lastRecord.getPriority() && _manager.displayOnScreen())
             System.out.print(dmsg);
-        dmsg = dupMessage(dupCount, lastRecord, true);
+        dmsg = dupMessage(dupCount, lastRecord, BUFFER_DISPLAYED_REVERSE, true);
         _manager.getBuffer().add(dmsg);
         if (lastRecord.getPriority() >= Log.CRIT)
             _manager.getBuffer().addCritical(dmsg);
@@ -151,20 +153,22 @@ abstract class LogWriter implements Runnable {
      *  Return a msg with the date stamp of the last duplicate
      *  @since 0.9.3
      */
-    private String dupMessage(int dupCount, LogRecord lastRecord, boolean reverse) {
-        String arrows = reverse ? (SystemVersion.isAndroid() ? "vvv" : "&darr;&darr;&darr;") : "^^^";
+    private String dupMessage(int dupCount, LogRecord lastRecord, boolean reverse, boolean html) {
+        boolean nohtml = !html || SystemVersion.isAndroid();
+        String arrows = reverse ? (nohtml ? "vvv" : "&darr;&darr;&darr;")
+                                : (nohtml ? "^^^" : "&uarr;&uarr;&uarr;");
         return LogRecordFormatter.getWhen(_manager, lastRecord) + ' ' + arrows + ' ' +
-               _t(dupCount, "1 similar message omitted", "{0} similar messages omitted") + ' ' + arrows +
+               ngettext("{0} similar message omitted", "{0} similar messages omitted", dupCount) + ' ' + arrows +
                LogRecordFormatter.NL;
     }
     
-    private static final String BUNDLE_NAME = "net.i2p.router.web.messages";
+    private static final String BUNDLE_NAME = "net.i2p.util.messages";
 
     /**
      *  gettext
      *  @since 0.9.3
      */
-    private String _t(int a, String b, String c) {
+    private String ngettext(String b, String c, int a) {
         return Translate.getString(a, b, c, _manager.getContext(), BUNDLE_NAME);
     }
 

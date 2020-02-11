@@ -2,10 +2,16 @@ package net.i2p.router.web;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import net.i2p.I2PAppContext;
 import net.i2p.router.RouterContext;
 import net.i2p.util.FileUtil;
 import net.i2p.util.PortMapper;
@@ -37,7 +43,23 @@ public class WebAppStarter {
 
     private static final Map<String, Long> warModTimes = new ConcurrentHashMap<String, Long>();
     static final Map<String, String> INIT_PARAMS = new HashMap<String, String>(4);
-    //static private Log _log;
+
+    // There are 4 additional jars that are required to do the Servlet 3.0 annotation scanning.
+    // The following 4 classes were the first to get thrown as not found, for each jar.
+    // So use them to see if we have the 4 jars.
+    // jetty-annotations.jar
+    private static final String CLASS_ANNOT = "org.eclipse.jetty.annotations.AnnotationConfiguration";
+    // jetty-plus.jar
+    private static final String CLASS_ANNOT2 = "org.eclipse.jetty.plus.annotation.LifeCycleCallback";
+    // asm.jar
+    private static final String CLASS_ANNOT3 = "org.objectweb.asm.Type";
+    // javax-annotations-api.jar
+    private static final String CLASS_ANNOT4 = "javax.annotation.security.RunAs";
+
+    private static final String CLASS_CONFIG = "org.eclipse.jetty.webapp.JettyWebXmlConfiguration";
+
+    private static final boolean HAS_ANNOTATION_CLASSES;
+    private static final Set<String> BUILTINS = new HashSet<String>(8);
 
     static {
         //_log = ContextHelper.getContext(null).logManager().getLog(WebAppStarter.class); ;
@@ -45,6 +67,20 @@ public class WebAppStarter {
         String pfx = "org.eclipse.jetty.servlet.Default.";
         INIT_PARAMS.put(pfx + "cacheControl", "max-age=86400");
         INIT_PARAMS.put(pfx + "dirAllowed", "false");
+
+        boolean found = false;
+        try {
+            Class<?> cls = Class.forName(CLASS_ANNOT, false, ClassLoader.getSystemClassLoader());
+            cls = Class.forName(CLASS_ANNOT2, false, ClassLoader.getSystemClassLoader());
+            cls = Class.forName(CLASS_ANNOT3, false, ClassLoader.getSystemClassLoader());
+            cls = Class.forName(CLASS_ANNOT4, false, ClassLoader.getSystemClassLoader());
+            found = true;
+        } catch (Exception e) {}
+        HAS_ANNOTATION_CLASSES = found;
+
+        // don't scan these wars
+        BUILTINS.addAll(Arrays.asList(new String[] {"i2psnark", "i2ptunnel", "imagegen", "jsonrpc",
+                                                    "routerconsole", "susidns", "susimail"} ));
     }
 
 
@@ -114,20 +150,31 @@ public class WebAppStarter {
         tmpdir.mkdir();
         wac.setTempDirectory(tmpdir);
         // all the JSPs are precompiled, no need to extract
-        wac.setExtractWAR(false);
+        // UNLESS it's a plugin and we want to scan it for annotations.
+        // We do not use Servlet 3.0 for any built-in wars.
+        // Jetty bug - annotation scanning fails unless we extract the war:
+        // org.eclipse.jetty.server.Server: Skipping scan on invalid file jar:file:/home/.../i2p/webapps/routerconsole.war!/WEB-INF/classes/net/i2p/router/web/servlets/CodedIconRendererServlet.class
+        // See AnnotationParser.isValidClassFileName()
+        // Server must be at DEBUG level to see what's happening
+        boolean scanAnnotations = HAS_ANNOTATION_CLASSES && !BUILTINS.contains(appName);
+        //System.out.println("Scanning " + appName + " for annotations? " + scanAnnotations);
+        wac.setExtractWAR(scanAnnotations);
 
         // this does the passwords...
         RouterConsoleRunner.initialize(ctx, wac);
-        setWebAppConfiguration(wac);
+        setWebAppConfiguration(wac, scanAnnotations);
         server.addHandler(wac);
         server.mapContexts();
         return wac;
     }
 
     /**
+     *  @param scanAnnotations Should we check for Servlet 3.0 annotations?
+     *                         The war MUST be set to extract (due to Jetty bug),
+     *                         and annotation classes MUST be available
      *  @since Jetty 9
      */
-    static void setWebAppConfiguration(WebAppContext wac) {
+    static void setWebAppConfiguration(WebAppContext wac, boolean scanAnnotations) {
         // see WebAppConfiguration for info
         String[] classNames = wac.getConfigurationClasses();
         // In Jetty 9, it doesn't set the defaults if we've already added one, but the
@@ -137,20 +184,37 @@ public class WebAppStarter {
         // See WebAppContext.loadConfigurations() in source
         if (classNames.length == 0)
             classNames = wac.getDefaultConfigurationClasses();
-        String[] newClassNames = new String[classNames.length + 1];
-        for (int j = 0; j < classNames.length; j++)
-             newClassNames[j] = classNames[j];
-        newClassNames[classNames.length] = WebAppConfiguration.class.getName();
-        wac.setConfigurationClasses(newClassNames);
+        List<String> newClassNames = new ArrayList<String>(Arrays.asList(classNames));
+        for (String name : newClassNames) {
+             // fix for Jetty 9.4 ticket #2385
+             wac.prependServerClass("-" + name);
+        }
+        // https://www.eclipse.org/jetty/documentation/current/using-annotations.html
+        // https://www.eclipse.org/jetty/documentation/9.4.x/using-annotations-embedded.html
+        if (scanAnnotations) {
+            if (!newClassNames.contains(CLASS_ANNOT)) {
+                int idx = newClassNames.indexOf(CLASS_CONFIG);
+                if (idx >= 0)
+                    newClassNames.add(idx, CLASS_ANNOT);
+                else
+                    newClassNames.add(CLASS_ANNOT);
+            }
+        }
+        newClassNames.add(WebAppConfiguration.class.getName());
+        wac.setConfigurationClasses(newClassNames.toArray(new String[newClassNames.size()]));
     }
 
     /**
      *  Stop it and remove the context.
      *  Throws just about anything, caller would be wise to catch Throwable
+     *
+     *  Warning, this will NOT work during shutdown, because
+     *  the console is already unregistered.
+     *
      *  @since public since 0.9.33, was package private
      */
     public static void stopWebApp(RouterContext ctx, String appName) {
-        ContextHandler wac = getWebApp(appName);
+        ContextHandler wac = getWebApp(ctx, appName);
         if (wac == null)
             return;
         ctx.portMapper().unregister(appName);
@@ -158,9 +222,32 @@ public class WebAppStarter {
             // not graceful is default in Jetty 6?
             wac.stop();
         } catch (Exception ie) {}
-        ContextHandlerCollection server = getConsoleServer();
+        ContextHandlerCollection server = getConsoleServer(ctx);
         if (server == null)
             return;
+        try {
+            server.removeHandler(wac);
+            server.mapContexts();
+        } catch (IllegalStateException ise) {}
+    }
+
+    /**
+     *  Stop it and remove the context.
+     *  Throws just about anything, caller would be wise to catch Throwable
+     *  @since 0.9.41
+     */
+    static void stopWebApp(RouterContext ctx, Server s, String appName) {
+        ContextHandlerCollection server = getConsoleServer(s);
+        if (server == null)
+            return;
+        ContextHandler wac = getWebApp(server, appName);
+        if (wac == null)
+            return;
+        ctx.portMapper().unregister(appName);
+        try {
+            // not graceful is default in Jetty 6?
+            wac.stop();
+        } catch (Exception ie) {}
         try {
             server.removeHandler(wac);
             server.mapContexts();
@@ -171,20 +258,55 @@ public class WebAppStarter {
      *  As of 0.9.34, the appName will be registered with the PortMapper,
      *  and PortMapper.isRegistered() will be more efficient than this.
      *
+     *  Warning, this will NOT work during shutdown, because
+     *  the console is already unregistered.
+     *
      *  @since public since 0.9.33; was package private
      */
-    public static boolean isWebAppRunning(String appName) {
-        ContextHandler wac = getWebApp(appName);
+    public static boolean isWebAppRunning(I2PAppContext ctx, String appName) {
+        ContextHandler wac = getWebApp(ctx, appName);
         if (wac == null)
             return false;
         return wac.isStarted();
     }
     
-    /** @since Jetty 6 */
-    static ContextHandler getWebApp(String appName) {
-        ContextHandlerCollection server = getConsoleServer();
+    /**
+     *  @since 0.9.41
+     */
+    static boolean isWebAppRunning(Server s, String appName) {
+        ContextHandler wac = getWebApp(s, appName);
+        if (wac == null)
+            return false;
+        return wac.isStarted();
+    }
+    
+    /**
+     *  Warning, this will NOT work during shutdown, because
+     *  the console is already unregistered.
+     *
+     *  @since Jetty 6
+     */
+    static ContextHandler getWebApp(I2PAppContext ctx, String appName) {
+        ContextHandlerCollection server = getConsoleServer(ctx);
         if (server == null)
             return null;
+        return getWebApp(server, appName);
+    }
+    
+    /**
+     *  @since 0.9.41
+     */
+    static ContextHandler getWebApp(Server s, String appName) {
+        ContextHandlerCollection server = getConsoleServer(s);
+        if (server == null)
+            return null;
+        return getWebApp(server, appName);
+    }
+    
+    /**
+     *  @since 0.9.41
+     */
+    private static ContextHandler getWebApp(ContextHandlerCollection server, String appName) {
         Handler handlers[] = server.getHandlers();
         if (handlers == null)
             return null;
@@ -201,12 +323,23 @@ public class WebAppStarter {
 
     /**
      *  See comments in ConfigClientsHandler
+     *
+     *  Warning, this will NOT work during shutdown, because
+     *  the console is already unregistered.
+     *
      *  @since public since 0.9.33, was package private
      */
-    public static ContextHandlerCollection getConsoleServer() {
-        Server s = RouterConsoleRunner.getConsoleServer();
+    public static ContextHandlerCollection getConsoleServer(I2PAppContext ctx) {
+        Server s = RouterConsoleRunner.getConsoleServer(ctx);
         if (s == null)
             return null;
+        return getConsoleServer(s);
+    }
+
+    /**
+     *  @since 0.9.41
+     */
+    private static ContextHandlerCollection getConsoleServer(Server s) {
         Handler h = s.getChildHandlerByClass(ContextHandlerCollection.class);
         if (h == null)
             return null;

@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.lang.IllegalArgumentException;
 import java.net.URI;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 
@@ -28,6 +29,7 @@ import net.i2p.util.OrderedProperties;
 import net.i2p.util.PortMapper;
 import net.i2p.util.SecureDirectory;
 import net.i2p.util.SecureFile;
+import net.i2p.util.SystemVersion;
 import net.i2p.util.VersionComparator;
 
 
@@ -49,6 +51,7 @@ import net.i2p.util.VersionComparator;
 class PluginUpdateRunner extends UpdateRunner {
 
     private String _appName;
+    private final String _appDisplayName;
     private final String _oldVersion;
     private final URI _uri;
     private final String _xpi2pURL;
@@ -69,6 +72,27 @@ class PluginUpdateRunner extends UpdateRunner {
             _uri = uris.get(0);
         _xpi2pURL = _uri.toString();
         _appName = appName;
+        // For new plugin installs, ConsoleUpdateManager gives us a fake appName
+        // which is a random long. See installPlugin() for why.
+        // If that's the case, create a better name from the URI.
+        String appDisplayName = appName;
+        try {
+            Long.parseLong(appName);
+            String s = _uri.getPath();
+            if (s != null) {
+                int p = s.lastIndexOf('/');
+                if (p >= 0)
+                    s = s.substring(p + 1);
+                String slc = s.toLowerCase(Locale.US);
+                if (slc.endsWith(".su3"))
+                    s = s.substring(0, s.length() - 4);
+                else if (slc.endsWith(".xpi2p"))
+                    s = s.substring(0, s.length() - 6);
+                if (s.length() > 0)
+                    appDisplayName = s;
+            }
+        } catch (NumberFormatException nfe) {}
+        _appDisplayName = appDisplayName;
         _oldVersion = oldVersion;
     }
 
@@ -127,10 +151,12 @@ class PluginUpdateRunner extends UpdateRunner {
                     _log.error("Error downloading plugin", t);
                 }
             }
-            if (_updated)
+            if (_updated) {
                 _mgr.notifyComplete(this, _newVersion, null);
-            else
+                _mgr.notifyComplete(this, _errMsg);
+            } else {
                 _mgr.notifyTaskFailed(this, _errMsg, null);
+            }
         }
 
     /**
@@ -140,14 +166,14 @@ class PluginUpdateRunner extends UpdateRunner {
     @Override
     public void bytesTransferred(long alreadyTransferred, int currentWrite, long bytesTransferred, long bytesRemaining, String url) {
         long d = currentWrite + bytesTransferred;
-        String status = "<b>" + _t("Downloading plugin") + ": " + _appName + "</b>";
+        String status = "<b>" + _t("Downloading plugin") + ": " + _appDisplayName + "</b>";
         _mgr.notifyProgress(this, status, d, d + bytesRemaining);
     }
 
         @Override
         public void transferComplete(long alreadyTransferred, long bytesTransferred, long bytesRemaining, String url, String outputFile, boolean notModified) {
             if (!(_xpi2pURL.startsWith("file:") || _method == UpdateMethod.FILE))
-                updateStatus("<b>" + _t("Plugin downloaded") + "</b>");
+                updateStatus("<b>" + _t("Plugin downloaded") + ": " + _appDisplayName + "</b>");
             File f = new File(_updateFile);
             File appDir = new SecureDirectory(_context.getConfigDir(), PLUGIN_DIR);
             if ((!appDir.exists()) && (!appDir.mkdir())) {
@@ -406,8 +432,7 @@ class PluginUpdateRunner extends UpdateRunner {
             }
 
             minVersion = PluginStarter.stripHTML(props, "min-java-version");
-            if (minVersion != null &&
-                VersionComparator.comp(System.getProperty("java.version"), minVersion) < 0) {
+            if (minVersion != null && !SystemVersion.isJava(minVersion)) {
                 to.delete();
                 statusDone("<b>" + _t("This plugin requires Java version {0} or higher", minVersion) + "</b>");
                 return;
@@ -474,6 +499,15 @@ class PluginUpdateRunner extends UpdateRunner {
                     to.delete();
                     statusDone("<b>" + _t("Plugin requires Jetty version {0} or lower", "8.9999") + "</b>");
                     return;
+                }
+                if (SystemVersion.isJava9()) {
+                    blacklistVersion = PluginStarter.java9Blacklist.get(appName);
+                    if (blacklistVersion != null &&
+                        VersionComparator.comp(version, blacklistVersion) <= 0) {
+                        to.delete();
+                        statusDone("<b>" + _t("Plugin requires Java version {0} or lower", "8.9999") + "</b>");
+                        return;
+                    }
                 }
                 maxVersion = PluginStarter.stripHTML(props, "max-jetty-version");
                 if (maxVersion != null &&

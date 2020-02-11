@@ -56,10 +56,10 @@ public class I2PTunnelHTTPServer extends I2PTunnelServer {
     public static final String OPT_REJECT_USER_AGENTS = "rejectUserAgents";
     public static final String OPT_USER_AGENTS = "userAgentRejectList";
     public static final int DEFAULT_POST_WINDOW = 5*60;
-    public static final int DEFAULT_POST_BAN_TIME = 30*60;
+    public static final int DEFAULT_POST_BAN_TIME = 20*60;
     public static final int DEFAULT_POST_TOTAL_BAN_TIME = 10*60;
-    public static final int DEFAULT_POST_MAX = 3;
-    public static final int DEFAULT_POST_TOTAL_MAX = 10;
+    public static final int DEFAULT_POST_MAX = 6;
+    public static final int DEFAULT_POST_TOTAL_MAX = 20;
 
     /** what Host: should we seem to be to the webserver? */
     private String _spoofHost;
@@ -92,6 +92,11 @@ public class I2PTunnelHTTPServer extends I2PTunnelServer {
     // We set it to forever so that it won't timeout when sending a large response.
     // The server will presumably have its own timeout implemented for POST
     private static final long DEFAULT_HTTP_READ_TIMEOUT = -1;
+    // Set a relatively short timeout for GET/HEAD,
+    // and a long failsafe timeout for POST/CONNECT, since the user
+    // could be POSTing a massive file
+    private static final int SERVER_READ_TIMEOUT_GET = 5*60*1000;
+    private static final int SERVER_READ_TIMEOUT_POST = 4*60*60*1000;
     
     private long _startedOn = 0L;
     private ConnThrottler _postThrottler;
@@ -230,9 +235,10 @@ public class I2PTunnelHTTPServer extends I2PTunnelServer {
                 long pb = 1000L * getIntOption(OPT_POST_BAN_TIME, DEFAULT_POST_BAN_TIME);
                 long px = 1000L * getIntOption(OPT_POST_TOTAL_BAN_TIME, DEFAULT_POST_TOTAL_BAN_TIME);
                 if (_postThrottler == null)
-                    _postThrottler = new ConnThrottler(pp, pt, pw, pb, px, "POST", _log);
+                    _postThrottler = new ConnThrottler(pp, pt, pw, pb, px, "POST/PUT", _log);
                 else
                     _postThrottler.updateLimits(pp, pt, pw, pb, px);
+                _postThrottler.start();
             }
         }
     }
@@ -254,7 +260,7 @@ public class I2PTunnelHTTPServer extends I2PTunnelServer {
     public boolean close(boolean forced) {
         synchronized(this) {
             if (_postThrottler != null)
-                _postThrottler.clear();
+                _postThrottler.stop();
         }
         return super.close(forced);
     }
@@ -481,10 +487,11 @@ public class I2PTunnelHTTPServer extends I2PTunnelServer {
 
             if (_postThrottler != null &&
                 command.length() >= 5 &&
-                command.substring(0, 5).toUpperCase(Locale.US).equals("POST ")) {
+                (command.substring(0, 5).toUpperCase(Locale.US).equals("POST ") ||
+                 command.substring(0, 4).toUpperCase(Locale.US).equals("PUT "))) {
                 if (_postThrottler.shouldThrottle(peerHash)) {
                     if (_log.shouldLog(Log.WARN))
-                        _log.warn("Refusing POST since peer is throttled: " + peerB32);
+                        _log.warn("Refusing POST/PUT since peer is throttled: " + peerB32);
                     try {
                         // Send a 429, so the user doesn't get an HTTP Proxy error message
                         // and blame his router or the network.
@@ -515,7 +522,12 @@ public class I2PTunnelHTTPServer extends I2PTunnelServer {
             }
             if (spoofHost != null)
                 setEntry(headers, "Host", spoofHost);
-            setEntry(headers, "Connection", "close");
+
+            // Force Connection: close, unless websocket
+            String conn = getEntryOrNull(headers, "Connection");
+            if (conn == null || !conn.toLowerCase(Locale.US).contains("upgrade"))
+                setEntry(headers, "Connection", "close");
+
             // we keep the enc sent by the browser before clobbering it, since it may have 
             // been x-i2p-gzip
             String enc = getEntryOrNull(headers, "Accept-Encoding");
@@ -549,6 +561,14 @@ public class I2PTunnelHTTPServer extends I2PTunnelServer {
             String modifiedHeader = formatHeaders(headers, command);
             if (_log.shouldLog(Log.DEBUG))
                 _log.debug("Modified header: [" + modifiedHeader + "]");
+
+            // Set a relatively short timeout for GET/HEAD,
+            // and a long failsafe timeout for POST/CONNECT, since the user
+            // could be POSTing a massive file
+            if (modifiedHeader.startsWith("GET ") || modifiedHeader.startsWith("HEAD "))
+                s.setSoTimeout(SERVER_READ_TIMEOUT_GET);
+            else
+                s.setSoTimeout(SERVER_READ_TIMEOUT_POST);
             
             Runnable t;
             if (allowGZIP && useGZIP) {
@@ -641,7 +661,8 @@ public class I2PTunnelHTTPServer extends I2PTunnelServer {
                     _log.info("request headers: " + _headers);
                 serverout.write(DataHelper.getUTF8(_headers));
                 browserin = _browser.getInputStream();
-                // Don't spin off a thread for this except for POSTs
+                // Don't spin off a thread for this except for POSTs and PUTs
+                // TODO Upgrade:
                 // beware interference with Shoutcast, etc.?
                 if ((!(_headers.startsWith("GET ") || _headers.startsWith("HEAD "))) ||
                     browserin.available() > 0) {  // just in case
@@ -1042,6 +1063,8 @@ public class I2PTunnelHTTPServer extends I2PTunnelServer {
                     name = "User-Agent";
                 else if ("referer".equals(lcName))
                     name = "Referer";
+                else if ("connection".equals(lcName))
+                    name = "Connection";
 
                 // For incoming, we remove certain headers to prevent spoofing.
                 // For outgoing, we remove certain headers to improve anonymity.

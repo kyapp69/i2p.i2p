@@ -14,12 +14,15 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 
+import net.i2p.data.BlindData;
 import net.i2p.data.Destination;
 import net.i2p.data.Hash;
 import net.i2p.data.PrivateKey;
 import net.i2p.data.SessionKey;
 import net.i2p.data.SessionTag;
+import net.i2p.data.Signature;
 import net.i2p.data.SigningPrivateKey;
+import net.i2p.data.SigningPublicKey;
 
 /**
  * <p>Define the standard means of sending and receiving messages on the 
@@ -300,9 +303,35 @@ public interface I2PSession {
     public PrivateKey getDecryptionKey();
 
     /**
-     * Retrieve the signing SigningPrivateKey associated with the Destination
+     * Retrieve the signing SigningPrivateKey associated with the Destination.
+     * As of 0.9.38, this will be the transient key if offline signed.
      */
     public SigningPrivateKey getPrivateKey();
+
+    /**
+     *  Does this session have offline and transient keys?
+     *  @since 0.9.38
+     */
+    public boolean isOffline();
+
+    /**
+     *  Get the offline expiration
+     *  @return Java time (ms) or 0 if not initialized or does not have offline keys
+     *  @since 0.9.38
+     */
+    public long getOfflineExpiration();
+
+    /**
+     *  @return null on error or if not initialized or does not have offline keys
+     *  @since 0.9.38
+     */
+    public Signature getOfflineSignature();
+
+    /**
+     *  @return null on error or if not initialized or does not have offline keys
+     *  @since 0.9.38
+     */
+    public SigningPublicKey getTransientSigningPublicKey();
 
     /**
      * Lookup a Destination by Hash.
@@ -382,6 +411,17 @@ public interface I2PSession {
     public Destination lookupDest(String name, long maxWait) throws I2PSessionException;
 
     /**
+     *  Ask the router to lookup a Destination by host name.
+     *  Blocking. See above for details.
+     *  Same as lookupDest() but with a failure code in the return value
+     *
+     *  @param maxWait ms
+     *  @since 0.9.43
+     *  @return non-null
+     */
+    public LookupResult lookupDest2(String name, long maxWait) throws I2PSessionException;
+
+    /**
      *  Pass updated options to the router.
      *  Does not remove properties previously present but missing from this options parameter.
      *  Fails silently if session is not connected.
@@ -396,6 +436,12 @@ public interface I2PSession {
      * @since 0.8.3
      */
     public int[] bandwidthLimits() throws I2PSessionException;
+
+    /**
+     *
+     *  @since 0.9.43
+     */
+    public void sendBlindingInfo(BlindData bd) throws I2PSessionException;
 
     /**
      *  Listen on specified protocol and port.

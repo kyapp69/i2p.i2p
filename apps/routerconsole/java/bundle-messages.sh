@@ -33,12 +33,11 @@ fi
 # set LG2 to the language you need in environment variables to enable this
 
 
-# list specific files in core/ and router/ here, so we don't scan the whole tree
+# list specific files in router/ here, so we don't scan the whole tree
+# core/ now has its own bundle
+# router/ now has its own bundle for some files
 ROUTERFILES="\
-   ../../../core/java/src/net/i2p/data/DataHelper.java \
    ../../../router/java/src/net/i2p/router/Blocklist.java \
-   ../../../router/java/src/net/i2p/router/CommSystemFacade.java \
-   ../../../router/java/src/net/i2p/router/RouterThrottleImpl.java \
    ../../../router/java/src/net/i2p/router/networkdb/reseed/Reseeder.java \
    ../../../router/java/src/net/i2p/router/tasks/CoalesceStatsEvent.java \
    ../../../router/java/src/net/i2p/router/transport/CommSystemFacadeImpl.java \
@@ -49,12 +48,11 @@ ROUTERFILES="\
    ../../../router/java/src/net/i2p/router/transport/ntcp/EstablishState.java \
    ../../../router/java/src/net/i2p/router/transport/ntcp/NTCPTransport.java \
    ../../../router/java/src/net/i2p/router/transport/udp/UDPTransport.java \
-   ../../../router/java/src/net/i2p/router/tunnel/pool/BuildHandler.java \
-   ../../../core/java/src/net/i2p/util/LogWriter.java \
 "
 
 # add ../java/ so the refs will work in the po file
-JPATHS="../java/src ../jsp/WEB-INF ../java/strings $ROUTERFILES"
+# do not scan 3rd-party code in java/src/com or java/src/edu
+JPATHS="../java/src/net ../jsp/WEB-INF ../java/strings $ROUTERFILES"
 for i in ../locale/messages_*.po
 do
 	# get language
@@ -125,7 +123,7 @@ do
         # only generate for non-source language
         echo "Generating ${CLASS}_$LG ResourceBundle..."
 
-        msgfmt -V | grep -q '0\.19'
+        msgfmt -V | grep -q -E ' 0\.((19)|[2-9])'
         if [ $? -ne 0 ]
         then
             # slow way

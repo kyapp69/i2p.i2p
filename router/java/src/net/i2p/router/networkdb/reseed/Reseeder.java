@@ -66,6 +66,8 @@ public class Reseeder {
     private static final boolean ENABLE_NON_SU3 = false;
     private static final int MIN_RI_WANTED = 100;
     private static final int MIN_RESEED_SERVERS = 2;
+    // network ID cross-check, proposal 147, as of 0.9.42
+    private static final String NETID_PARAM = "?netid=";
 
     /**
      *  NOTE - URLs that are in both the standard and SSL groups must use the same hostname,
@@ -111,17 +113,13 @@ public class Reseeder {
         // ----------------------------------           ------------------------     -------------------------     ---------------
         "https://i2p.novg.net/"               + ',' +   // igor_at_novg.net.crt      // CA                         // Java 8+ only
         "https://i2pseed.creativecowpat.net:8443/" + ',' + // creativecowpat_at_mail.i2p.crt // i2pseed.creativecowpat.net.crt // Java 7+
-        "https://itoopie.atomike.ninja/"      + ',' +   // atomike_at_mail.i2p.crt   // CA                         // Java 8+ only
         "https://reseed.onion.im/"            + ',' +   // lazygravy_at_mail.i2p     // reseed.onion.im.crt        // Java 8+ only
         "https://reseed.memcpy.io/"           + ',' +   // hottuna_at_mail.i2p.crt   // CA                         // SNI required
-        "https://reseed.atomike.ninja/"       + ',' +   // atomike_at_mail.i2p.crt   // CA                         // SNI required, Java 8+ only
-        "https://i2p.manas.ca:8443/"          + ',' +   // zmx_at_mail.i2p.crt       // CA                         // SNI required
-        "https://i2p-0.manas.ca:8443/"        + ',' +   // zmx_at_mail.i2p.crt       // CA                         // SNI required
         "https://i2p.mooo.com/netDb/"         + ',' +   // bugme_at_mail.i2p.crt     // i2p.mooo.com.crt
         "https://download.xxlspeed.com/"      + ',' +   // backup_at_mail.i2p.crt    // CA                         // Java 8+
         "https://netdb.i2p2.no/"              + ',' +   // meeh_at_mail.i2p.crt      // CA                         // SNI required
-        //"https://us.reseed.i2p2.no:444/"      + ',' +   // meeh_at_mail.i2p.crt      // us.reseed.i2p2.no.crt
-        //"https://uk.reseed.i2p2.no:444/"      + ',' +   // meeh_at_mail.i2p.crt      // uk.reseed.i2p2.no.crt
+        "https://reseed.i2p2.no/"              + ',' +   // meeh_at_mail.i2p.crt      // CA                         // SNI required
+        "https://reseed2.i2p2.no/"              + ',' +   // meeh_at_mail.i2p.crt      // CA                         // SNI required
         "https://reseed.i2p-projekt.de/";               // echelon_at_mail.i2p.crt   // echelon.reseed2017.crt     // Java 8+
 
     private static final String SU3_FILENAME = "i2pseeds.su3";
@@ -341,12 +339,19 @@ public class Reseeder {
             int total;
             if (_url != null) {
                 String lc = _url.getPath().toLowerCase(Locale.US);
-                if (lc.endsWith(".su3"))
-                    total = reseedSU3(_url, false);
-                else if (lc.endsWith(".zip"))
+                if (lc.endsWith(".su3")) {
+                    URI uri;
+                    try {
+                        uri = new URI(_url.toString() + NETID_PARAM + _context.router().getNetworkID());
+                    } catch (URISyntaxException use) {
+                        throw new IllegalArgumentException("Bad URL " + _url, use);
+                    }
+                    total = reseedSU3(uri, false);
+                } else if (lc.endsWith(".zip")) {
                     total = reseedZip(_url, false);
-                else
+                } else {
                     throw new IllegalArgumentException("Must end with .zip or .su3");
+                }
             } else {
                 total = reseed(false);
             }
@@ -553,8 +558,6 @@ public class Reseeder {
             }
             if (!isSNISupported()) {
                 try {
-                    URLList.remove(new URI("https://i2p.manas.ca:8443/"));
-                    URLList.remove(new URI("https://i2p-0.manas.ca:8443/"));
                     URLList.remove(new URI("https://download.xxlspeed.com/"));
                     URLList.remove(new URI("https://netdb.i2p2.no/"));
                 } catch (URISyntaxException mue) {}
@@ -576,6 +579,8 @@ public class Reseeder {
         * @return count of routerinfos successfully fetched
         */
         private int reseed(List<URI> URLList, boolean echoStatus) {
+            // network ID cross-check, proposal 147, as of 0.9.42
+            String query = NETID_PARAM + _context.router().getNetworkID();
             int total = 0;
             int fetched_reseed_servers = 0;
             for (int i = 0; i < URLList.size() && _isRunning; i++) {
@@ -587,7 +592,7 @@ public class Reseeder {
                 int dl = 0;
                 if (ENABLE_SU3) {
                     try {
-                        dl = reseedSU3(new URI(url.toString() + SU3_FILENAME), echoStatus);
+                        dl = reseedSU3(new URI(url.toString() + SU3_FILENAME + query), echoStatus);
                     } catch (URISyntaxException mue) {}
                 }
                 if (ENABLE_NON_SU3) {
@@ -801,6 +806,11 @@ public class Reseeder {
                     stats = extractZip(contentRaw);
                 fetched = stats[0];
                 errors = stats[1];
+                if (fetched == 0) {
+                    s = "Reseed got no router infos " + s;
+                    System.err.println(s);
+                    _log.error(s);
+                }
             } catch (Throwable t) {
                 String s = getDisplayString(seedURL);
                 System.err.println("Error reseeding " + s + ": " + t);

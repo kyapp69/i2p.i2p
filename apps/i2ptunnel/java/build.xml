@@ -30,6 +30,7 @@
     <property name="javac.compilerargs" value="" />
     <property name="javac.version" value="1.7" />
     <property name="require.gettext" value="true" />
+    <property name="manifest.classpath.name" value="Class-Path" />
 
     <!-- Compile includes ui/ classes but not web/ classes here -->
     <target name="compile" depends="depend">
@@ -41,6 +42,7 @@
             debug="true" deprecation="on" source="${javac.version}" target="${javac.version}" 
             destdir="./build/obj" 
             includeAntRuntime="false"
+            encoding="UTF-8"
             classpath="../../../core/java/build/i2p.jar:../../../core/java/build/gnu-getopt.jar:../../ministreaming/java/build/mstreaming.jar" >
             <compilerarg line="${javac.compilerargs}" />
         </javac>
@@ -56,6 +58,7 @@
             debug="true" deprecation="on" source="${javac.version}" target="${javac.version}" 
             destdir="./build/obj" 
             includeAntRuntime="false"
+            encoding="UTF-8"
             classpath="../../../core/java/build/i2p.jar:build/i2ptunnel.jar:../../jetty/jettylib/jetty-i2p.jar:../../jetty/jettylib/jetty-util.jar:../../jetty/jettylib/jetty-xml.jar" >
             <compilerarg line="${javac.compilerargs}" />
         </javac>
@@ -83,7 +86,7 @@
         <jar destfile="./build/i2ptunnel.jar" basedir="./build/obj" includes="**/*.class" excludes="**/ui/*.class **/web/*.class" >
             <manifest>
                 <attribute name="Main-Class" value="net.i2p.i2ptunnel.I2PTunnel" />
-                <attribute name="Class-Path" value="i2p.jar mstreaming.jar" />
+                <attribute name="${manifest.classpath.name}" value="i2p.jar mstreaming.jar" />
                 <attribute name="Implementation-Version" value="${full.version}" />
                 <attribute name="Built-By" value="${build.built-by}" />
                 <attribute name="Build-Date" value="${build.timestamp}" />
@@ -165,6 +168,7 @@
         </exec>
         <javac source="${javac.version}" target="${javac.version}" 
                includeAntRuntime="false"
+               encoding="UTF-8"
                srcdir="build/messages-src" destdir="../jsp/WEB-INF/classes">
             <compilerarg line="${javac.compilerargs}" />
         </javac>
@@ -209,6 +213,7 @@
         </exec>
         <javac source="${javac.version}" target="${javac.version}" 
                includeAntRuntime="false"
+               encoding="UTF-8"
                srcdir="build/messages-proxy-src" destdir="build/obj">
             <compilerarg line="${javac.compilerargs}" />
         </javac>
@@ -305,8 +310,13 @@
         <delete file="../jsp/web-out.xml" />
         <mkdir dir="../jsp/WEB-INF/" />
         <mkdir dir="../jsp/WEB-INF/classes" />
-        <!-- there are various jspc ant tasks, but they all seem a bit flakey -->
-        <java classname="org.apache.jasper.JspC" fork="true" failonerror="true">
+        <!-- See apps/routerconsole/java/build.xml for important JspC build documentation -->
+        <java classname="net.i2p.servlet.util.JspC" fork="true" failonerror="true">
+            <!-- these are to detect tomcat version and reproducible build setting -->
+            <jvmarg value="-Dbuild.reproducible=${build.reproducible}" />
+            <jvmarg value="-Dwith-libtomcat8-java=${with-libtomcat8-java}" />
+            <jvmarg value="-Dwith-libtomcat9-java=${with-libtomcat9-java}" />
+            <jvmarg value="-Djasper.jar=../../jetty/jettylib/jasper-runtime.jar" />
             <classpath>
                 <pathelement location="../../jetty/jettylib/jasper-runtime.jar" />
                 <pathelement location="../../jetty/jettylib/javax.servlet.jar" />
@@ -320,6 +330,7 @@
 
                 <pathelement location="../../jetty/jettylib/jasper-el.jar" />
                 <pathelement location="../../jetty/jettylib/commons-el.jar" />
+                <pathelement location="../../jetty/jettylib/jetty-xml.jar" />
                 <pathelement location="../../jetty/jettylib/jetty-util.jar" />
                 <pathelement location="${ant.home}/lib/ant.jar" />
                 <pathelement location="build/i2ptunnel.jar" />
@@ -340,6 +351,7 @@
         </java>
         <javac debug="true" deprecation="on" source="${javac.version}" target="${javac.version}" 
                includeAntRuntime="false"
+               encoding="UTF-8"
                destdir="../jsp/WEB-INF/classes/" srcdir="../jsp/WEB-INF/classes" includes="**/*.java">
             <compilerarg line="${javac.compilerargs}" />
             <classpath>
@@ -354,6 +366,7 @@
                 <pathelement location="../../jetty/jettylib/tomcat-util-scan.jar" />
 
                 <pathelement location="../../jetty/jettylib/commons-el.jar" />
+                <pathelement location="../../jetty/jettylib/jetty-xml.jar" />
                 <pathelement location="../../jetty/jettylib/jetty-util.jar" />
                 <pathelement location="build/i2ptunnel.jar" />
                 <pathelement location="build/temp-beans.jar" />
@@ -403,6 +416,7 @@
         <!-- We need the ant runtime, as it includes junit -->
         <javac srcdir="./src:./test/junit" debug="true" source="${javac.version}" target="${javac.version}"
                includeAntRuntime="true"
+               encoding="UTF-8"
                deprecation="on" destdir="./build/obj" >
             <compilerarg line="${javac.compilerargs}" />
             <classpath>

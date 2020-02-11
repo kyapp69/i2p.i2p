@@ -46,10 +46,11 @@ public class ConfigTunnelsHelper extends HelperBase {
             }
             
             String name = in.getDestinationNickname();
-            if (name == null)
+            if (name == null) {
                 name = out.getDestinationNickname();
-            if (name == null)
-                name = dest.calculateHash().toBase64().substring(0,6);
+                if (name == null)
+                    name = dest.calculateHash().toBase32();
+            }
         
             String prefix = dest.calculateHash().toBase64().substring(0,4);
             renderForm(buf, cur, prefix, _t("Client tunnels for {0}", DataHelper.escapeHTML(_t(name))), in, out);
@@ -225,7 +226,7 @@ public class ConfigTunnelsHelper extends HelperBase {
         for (int i = min; i <= max; i++) {
             buf.append("<option value=\"").append(i).append("\" ");
             if (i == now)
-                buf.append("selected=\"selected\" ");
+                buf.append(SELECTED);
             buf.append(">").append(ngettext(DUMMY1 + name, DUMMY2 + name + 's', i));
             buf.append("</option>\n");
         }

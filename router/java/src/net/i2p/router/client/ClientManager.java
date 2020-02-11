@@ -43,6 +43,7 @@ import net.i2p.router.ClientMessage;
 import net.i2p.router.Job;
 import net.i2p.router.JobImpl;
 import net.i2p.router.RouterContext;
+import net.i2p.util.ConcurrentHashSet;
 import net.i2p.util.I2PThread;
 import net.i2p.util.Log;
 import net.i2p.util.SimpleTimer2;
@@ -67,15 +68,19 @@ class ClientManager {
     // ClientConnectionRunner for clients w/out a Dest yet
     private final Set<ClientConnectionRunner> _pendingRunners;
     private final Set<SessionId> _runnerSessionIds;
+    private final Set<Destination> _metaDests;
+    private final Set<Hash> _metaHashes;
     protected final RouterContext _ctx;
     protected final int _port;
-    protected volatile boolean _isStarted;
+    protected volatile boolean _isStarted, _wasStarted;
     private final SimpleTimer2.TimedEvent _clientTimestamper;
 
     /** Disable external interface, allow internal clients only @since 0.8.3 */
     private static final String PROP_DISABLE_EXTERNAL = "i2cp.disableInterface";
     /** SSL interface (only) @since 0.8.3 */
     private static final String PROP_ENABLE_SSL = "i2cp.SSL";
+    /** Disable local-local "loopback", force all traffic through tunnels @since 0.9.44 */
+    private static final String PROP_DISABLE_LOOPBACK = "i2cp.disableLoopback";
 
     private static final int INTERNAL_QUEUE_SIZE = 256;
 
@@ -100,11 +105,13 @@ class ClientManager {
         //                                      "How large are messages received by the client?", 
         //                                      "ClientMessages", 
         //                                      new long[] { 60*1000l, 60*60*1000l, 24*60*60*1000l });
-        _listeners = new ArrayList<ClientListenerRunner>();
-        _runners = new ConcurrentHashMap<Destination, ClientConnectionRunner>();
-        _runnersByHash = new ConcurrentHashMap<Hash, ClientConnectionRunner>();
-        _pendingRunners = new HashSet<ClientConnectionRunner>();
-        _runnerSessionIds = new HashSet<SessionId>();
+        _listeners = new ArrayList<ClientListenerRunner>(4);
+        _runners = new ConcurrentHashMap<Destination, ClientConnectionRunner>(4);
+        _runnersByHash = new ConcurrentHashMap<Hash, ClientConnectionRunner>(4);
+        _pendingRunners = new HashSet<ClientConnectionRunner>(4);
+        _runnerSessionIds = new HashSet<SessionId>(4);
+        _metaDests = new ConcurrentHashSet<Destination>(4);
+        _metaHashes = new ConcurrentHashSet<Hash>(4);
         _port = port;
         _clientTimestamper = new ClientTimestamper();
         // following are for RequestLeaseSetJob
@@ -162,6 +169,9 @@ class ClientManager {
             _clientTimestamper.schedule(ClientTimestamper.LOOP_TIME);
         }
         _isStarted = true;
+        _wasStarted = true;
+        if (_log.shouldInfo())
+            _log.info("Started the ClientManager");
     }
     
     public synchronized void restart() {
@@ -207,8 +217,23 @@ class ClientManager {
      *  @since 0.8.3
      */
     public I2CPMessageQueue internalConnect() throws I2PSessionException {
-        if (!_isStarted)
-            throw new I2PSessionException("Router client manager is shut down");
+        if (!_isStarted) {
+            if (_wasStarted)
+                throw new I2PSessionException("Router client manager is shut down");
+            // don't throw the early birds out
+            // ClientManager starts shortly after the console, should be less than a second
+            // Wait up to 60 secs before giving up
+            int i = 0;
+            do {
+                try {
+                    Thread.sleep(200);
+                } catch (InterruptedException ie) {
+                    throw new I2PSessionException("Router client manager interrupted", ie);
+                }
+            } while (!_isStarted && i++ < 300);
+            if (!_isStarted)
+                throw new I2PSessionException("Router client manager failed to start");
+        }
         LinkedBlockingQueue<I2CPMessage> in = new LinkedBlockingQueue<I2CPMessage>(INTERNAL_QUEUE_SIZE);
         LinkedBlockingQueue<I2CPMessage> out = new LinkedBlockingQueue<I2CPMessage>(INTERNAL_QUEUE_SIZE);
         I2CPMessageQueue myQueue = new I2CPMessageQueueImpl(in, out);
@@ -218,13 +243,15 @@ class ClientManager {
         return hisQueue;
     }
 
+    /**
+     *  As of 0.9.45, this returns true iff the ClientManager is running.
+     *  Prior to that, it also required all external I2CP listeners
+     *  that were registered to be running.
+     *  Since most of our connections are in-JVM, we now return true even
+     *  if we have I2CP port conflicts.
+     */
     public synchronized boolean isAlive() {
-        boolean listening = true;
-        if (!_listeners.isEmpty()) {
-            for (ClientListenerRunner listener : _listeners)
-                listening = listening && listener.isListening();
-        }
-        return _isStarted && (_listeners.isEmpty() || listening);
+        return _isStarted;
     }
 
     public void registerConnection(ClientConnectionRunner runner) {
@@ -272,7 +299,7 @@ class ClientManager {
             }
         }
     }
-    
+
     /**
      *  Remove only the following session. Does not remove the runner if it has more.
      *
@@ -287,7 +314,21 @@ class ClientManager {
             _runnersByHash.remove(dest.calculateHash());
         }
     }
-    
+
+    /**
+     *  Remove the hash for the encrypted LS.
+     *  Call before unregisterConnection, or when the hash changes.
+     *
+     *  @since 0.9.39
+     */
+    public void unregisterEncryptedDestination(ClientConnectionRunner runner, Hash hash) {
+        if (_log.shouldLog(Log.WARN))
+            _log.warn("Unregistering encrypted LS "  + hash.toBase32());
+        synchronized (_runners) {
+            _runnersByHash.remove(hash);
+        }
+    }
+
     /**
      *  Add to the clients list. Check for a dup destination.
      *  Side effect: Sets the session ID of the runner.
@@ -306,7 +347,7 @@ class ClientManager {
         synchronized (_runners) {
             boolean fail = _runnersByHash.containsKey(dest.calculateHash());
             if (fail) {
-                rv = SessionStatusMessage.STATUS_INVALID;
+                rv = SessionStatusMessage.STATUS_DUP_DEST;
             } else {
                 SessionId id = locked_getNextSessionId();
                 if (id != null) {
@@ -320,14 +361,70 @@ class ClientManager {
                 }
             }
         }
-        if (rv == SessionStatusMessage.STATUS_INVALID) {
+        if (rv == SessionStatusMessage.STATUS_DUP_DEST) {
             _log.log(Log.CRIT, "Client attempted to register duplicate destination " + dest.toBase32());
         } else if (rv == SessionStatusMessage.STATUS_REFUSED) {
             _log.error("Max sessions exceeded " + dest.toBase32());
         }
         return rv;
     }
-    
+
+    /**
+     *  Call after destinationEstablished(),
+     *  when an encrypted leaseset is created, so we know it's local.
+     *  Add to the clients list. Check for a dup hash.
+     *  Caller must call runner.disconnectClient() on failure.
+     *
+     *  @param hash the location of the encrypted LS, will change every day
+     *  @return success, false on dup
+     *  @since 0.9.39
+     */
+    public boolean registerEncryptedDestination(ClientConnectionRunner runner, Hash hash) {
+        if (_log.shouldLog(Log.DEBUG))
+            _log.debug("New encrypted LS " + hash.toBase32());
+
+        boolean rv;
+        synchronized (_runners) {
+            rv = !_runnersByHash.containsKey(hash);
+            if (rv)
+                _runnersByHash.put(hash, runner);
+        }
+        if (!rv)
+            _log.error("Encrypted dest collision " + hash.toBase32());
+        return rv;
+    }
+
+    /**
+     *  Declare that we're going to publish a meta LS for this destination.
+     *  Must be called before publishing the leaseset.
+     *
+     *  @throws I2PSessionException on duplicate dest
+     *  @since 0.9.41
+     */
+    public void registerMetaDest(Destination dest) throws I2PSessionException {
+        synchronized (_runners) {
+            if (_runners.containsKey(dest) || _metaDests.contains(dest)) {
+                String msg = "Client attempted to register duplicate destination " + dest.toBase32();
+                _log.error(msg);
+                throw new I2PSessionException(msg);
+            }
+            _metaDests.add(dest);
+            _metaHashes.add(dest.calculateHash());
+        }
+    }
+
+    /**
+     *  Declare that we're no longer going to publish a meta LS for this destination.
+     *
+     *  @since 0.9.41
+     */
+    public void unregisterMetaDest(Destination dest) {
+        synchronized (_runners) {
+            _metaDests.remove(dest);
+            _metaHashes.remove(dest.calculateHash());
+        }
+    }
+
     /**
      *  Generate a new random, unused sessionId. Caller must synch on _runners.
      *  @return null on failure
@@ -356,8 +453,13 @@ class ClientManager {
      */
     void distributeMessage(Destination fromDest, Destination toDest, Payload payload,
                            MessageId msgId, long messageNonce, long expiration, int flags) { 
-        // check if there is a runner for it
-        ClientConnectionRunner runner = getRunner(toDest);
+        ClientConnectionRunner runner;
+        if (_ctx.getBooleanProperty(PROP_DISABLE_LOOPBACK)) {
+            runner = null;
+        } else {
+            // check if there is a runner for it
+            runner = getRunner(toDest);
+        }
         if (runner != null) {
             if (_log.shouldLog(Log.DEBUG))
                 _log.debug("Message " + msgId + " is targeting a local destination.  distribute it as such");
@@ -370,6 +472,15 @@ class ClientManager {
             Job j = new DistributeLocal(toDest, runner, sender, fromDest, payload, msgId, messageNonce);
             //_ctx.jobQueue().addJob(j);
             j.runJob();
+        } else if (!_metaDests.isEmpty() && _metaDests.contains(toDest)) {
+            // meta dests don't have runners but are local, and you can't send to them
+            ClientConnectionRunner sender = getRunner(fromDest);
+            if (sender == null) {
+                // sender went away
+                return;
+            }
+            int rc = MessageStatusMessage.STATUS_SEND_FAILURE_BAD_LEASESET;
+            sender.updateMessageDeliveryStatus(fromDest, msgId, messageNonce, rc);
         } else {
             // remote.  w00t
             if (_log.shouldLog(Log.DEBUG))
@@ -476,18 +587,20 @@ class ClientManager {
     }
     
     /**
-     *  Unsynchronized
+     *  Unsynchronized.
+     *  DOES contain meta destinations.
      */
     public boolean isLocal(Destination dest) { 
-        return _runners.containsKey(dest);
+        return _runners.containsKey(dest) || _metaDests.contains(dest);
     }
 
     /**
-     *  Unsynchronized
+     *  Unsynchronized.
+     *  DOES contain meta destinations.
      */
     public boolean isLocal(Hash destHash) { 
         if (destHash == null) return false;
-        return _runnersByHash.containsKey(destHash);
+        return _runnersByHash.containsKey(destHash) || _metaHashes.contains(destHash);
     }
     
     /**
@@ -503,7 +616,8 @@ class ClientManager {
     }
 
     /**
-     *  Unsynchronized
+     *  Unsynchronized.
+     *  Does NOT contain meta destinations.
      */
     public Set<Destination> listClients() {
         Set<Destination> rv = new HashSet<Destination>();
@@ -686,7 +800,7 @@ class ClientManager {
                 if (_log.shouldLog(Log.WARN))
                     _log.warn("Message received but we don't have a connection to " 
                               + dest + "/" + _msg.getDestinationHash() 
-                              + " currently.  DROPPED");
+                              + " currently.  DROPPED", new Exception());
             }
         }
     }

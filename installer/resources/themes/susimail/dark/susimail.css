@@ -7,8 +7,7 @@ html {
 }
 
 body {
-     background: url(/themes/console/dark/images/camotile2.png) top left fixed #000;
-     background: linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(0,0,0,0.7)), url(/themes/console/dark/images/camotile2.png) top left scroll #000;
+     background: #1F1A24;
      background-size: 100% 100%, 175px 175px !important;
      color: #ee9;
      font-family: "Droid Sans", "Noto Sans", Ubuntu, "Segoe UI", "Bitstream Vera Sans", "DejaVu Sans", Verdana, "Lucida Grande", Helvetica, sans-serif;
@@ -24,7 +23,6 @@ body {
 }
 
 body.iframed {
-     background: transparent !important;
      margin: 0;
      padding-top: 0;
 }
@@ -44,6 +42,7 @@ body.iframed {
 #pagenav, .sort, .topbuttons, h3 {
      -moz-user-select: none;
      -webkit-user-select: none;
+     -ms-user-select: none;
      user-select: none;
 }
 
@@ -59,7 +58,7 @@ hr {
      color: #494;
      background: #494;
      height: 1px;
-     border: 0px solid #494;
+     border: 0px solid #332940;
      width: 100%;
      margin: 5px 0;
      text-align: center;
@@ -96,18 +95,18 @@ p.text {
 p.info, p.error {
      color:#ee9;
      display: block !important;
-     border: 1px solid #494;
+     border: 1px solid #332940;
      margin: 20px 20px 0 !important;
      padding: 15px 10px 15px 45px;
-     background: #000 url(/themes/console/dark/images/infohelp.png) 10px center no-repeat;
-     background: url(/themes/console/dark/images/infohelp.png) 10px center no-repeat, linear-gradient(to right, #000 0%, #001500 65%, #001800 90%);
+     background: #1F1A24 url(/themes/console/dark/images/infohelp.png) 10px center no-repeat;
+     /*background: url(/themes/console/dark/images/infohelp.png) 10px center no-repeat, linear-gradient(to right, #000 0%, #001500 65%, #001800 90%);*/
      text-align: left;
      border-radius: 2px;
 }
 
 p.error {
      color: #f00;
-     background: url(/themes/console/images/info/errortriangle.png) no-repeat scroll 10px center #000;
+     background: url(/themes/console/images/info/errortriangle.png) no-repeat scroll 10px center;
      border: 1px solid #f00;
      border-radius: 2px;
      font-weight: bold;
@@ -142,19 +141,11 @@ p.mailbody, textarea {
 div.topbuttons {
      padding: 8px 0 !important;
      font-weight: bold;
-     border: 1px solid #494;
-     border-bottom: 0 solid;
      border-radius: 2px 2px 0 0;
      margin-bottom: -4px;
      margin-top: -1px;
      margin: -1px -1px -4px -1px;
-     border-bottom: 1px solid #494;
-     box-shadow: inset 0 0 0 1px #000;
-     background: #000;
-     background: linear-gradient(to bottom, #002000 0%, #000 100%);
-     background: linear-gradient(to bottom, rgba(0,0,0,0) 50%, #000 50%), repeating-linear-gradient(to right, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 2px, rgba(0,16,0,0.5) 2px, rgba(0,16,0,0.5) 4px), linear-gradient(to bottom, #002000, #000 75%) !important;
-     background: repeating-linear-gradient(to right, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 2px, rgba(0,32,0,0.5) 2px, rgba(0,64,0,0.5) 4px), linear-gradient(to bottom, rgba(0,32,0,0.5), rgba(0,0,0,0.8)), url(/themes/console/dark/images/camotile2.png) top left !important;
-     box-shadow: inset 0 0 0 2px #000;
+     border-bottom: 1px solid #332940;
 }
 
 .iframed .topbuttons {
@@ -187,7 +178,7 @@ td[colspan="9"] hr {
 }
 
 .mailbody {
-/*     display: block !important; */
+     background: 1F1A24;
      padding: 0 10px !important;
 }
 
@@ -200,7 +191,7 @@ table#mailbox {
 }
 
 #mailbox tr:nth-child(2) {
-     background: linear-gradient(to bottom, rgba(0,0,0,0) 50%, #000 50%), repeating-linear-gradient(to right, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 2px, rgba(0,16,0,0.5) 2px, rgba(0,16,0,0.5) 4px), linear-gradient(to bottom, #004000, #000 75%) !important;
+     /*background: linear-gradient(to bottom, rgba(0,0,0,0) 50%, #000 50%), repeating-linear-gradient(to right, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 2px, rgba(0,16,0,0.5) 2px, rgba(0,16,0,0.5) 4px), linear-gradient(to bottom, #004000, #000 75%) !important;*/
 }
 
 #mailbox th {
@@ -236,28 +227,20 @@ table#mailbox {
 }
 
 table#mailbox td[colspan="5"], table#mailbox td[colspan="4"] {
-     border-top: 1px solid #494 !important;
+     border-top: 1px solid #332940 !important;
      padding: 6px 0 2px !important;
 }
 
 table#mailbox td[colspan="5"] {
      border-bottom: none;
      padding: 9px 6px 6px !important;
+     background: #1F1A24;
 }
 
 table#mailbox td[colspan="4"] {
      padding: 9px 6px 6px !important;
      border-bottom: none;
      background: none;
-}
-
-.bottombuttons, #prefsave {
-     box-shadow: inset 0 0 0 2px #000 !important;
-     background: repeating-linear-gradient(to right, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 2px, rgba(0,16,0,0.5) 2px, rgba(0,16,0,0.5) 4px), linear-gradient(to bottom, rgba(0,24,0,0.4), #000 75%), url(/themes/console/dark/images/camotile2.png) !important;
-}
-
-.iframed .bottombuttons {
-     background: linear-gradient(to bottom, rgba(0,24,0,0.4) 25%, #000), repeating-linear-gradient(to right, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 2px, rgba(0,16,0,0.5) 2px, rgba(0,16,0,0.5) 4px), url(/themes/console/dark/images/camotile2.png) !important;
 }
 
 #composemail .bottombuttons {
@@ -291,9 +274,9 @@ table#mailbox tr[class^="list"]:hover {
      overflow: hidden;
 }
 
-#message_full td {
+/*#message_full td {
      background: #000;
-}
+}*/
 
 input.optbox {
      opacity: 0.8;
@@ -324,7 +307,7 @@ tr.bottombuttons:last-child td {
 }
 
 a:link {
-     color: #5a5;
+     color: #e6e6e7;
      text-decoration: none;
      font-weight: bold;
 }
@@ -343,18 +326,18 @@ a:active, a:visited:active, tr:hover td[onclick]:active a {
 }
 
 td {
-     color: #ee9;
+     color: #e6e6e7;
      margin: 0 5px;
      font-size: 9pt;
      padding: 2px;
 }
 
 tr.list0 {
-     background-color: #000800;
+     background-color: #1F1A24;
 }
 
 tr.list1 {
-     background-color: #010;
+     background-color: #1F1A24;
 }
 
 /* mailbox display finessing */
@@ -369,8 +352,8 @@ tr.list0:hover td, tr.list1:hover td {
 }
 
 tr.list0:hover, tr.list1:hover, tr.list0:hover a, tr.list1:hover a {
-     background: #002000;
-     color: #f60;
+     background: #332940;
+     color: #e6e6e7;
 }
 
 tr.list0:hover td:nth-child(3) a, tr.list1:hover td:nth-child(3) a, #mailbox td:nth-child(3) a:focus, #mailbox td:nth-child(3) a:focus {
@@ -465,7 +448,7 @@ pre {
 }
 
 .page {
-     color: #ee9;
+     color: #e6e6e7;
      margin: 0;
      padding: 0;
      font-size: 9pt !important;
@@ -488,16 +471,14 @@ th {
      background: #000000 url(../../console/dark/images/header.png) repeat scroll center center;
      background: linear-gradient(to bottom, #1a261a 0%, #223022 7%, #212f21 9%, #172317 21%, #091109 49%, #050d05 50%, #020602 51%, #010301 53%, #000000 56%, #000000 100%) !important;
      padding: 7px;
-     border-bottom: 1px solid #494;
-     border-top: 1px solid #494;
+     border-bottom: 1px solid #332940;
+     border-top: 1px solid #332940;
 }
 
 form {
      line-height: 160%;
      border-radius: 2px;
      padding-bottom: 0;
-     border: 1px solid #494;
-     background: #000;
 }
 
 
@@ -513,7 +494,6 @@ form table {
 textarea {
      background: #000;
      color: #ee9;
-     border: 1px solid #494;
      border-radius: 2px;
      padding: 5px;
 }
@@ -537,15 +517,12 @@ td#attachedfile {
 table#mailhead {
      font-size: 9pt;
      font-weight: bold;
-     border-bottom: 1px solid #494;
-     border-top: 1px solid #494;
-     background: #010;
      width: 100%;
-     background: #010;
+     background: #332940;
 }
 
 #mailhead td {
-     background: #010;
+     background: #1F1A24;
 }
 
 #mailhead td:first-child {
@@ -585,7 +562,7 @@ input {
      text-align: left;
      padding: 2px 2px 3px !important;
      border-radius: 2px;
-     border: 1px solid #494;
+     border: 1px solid #332940;
      color: #494;
      margin: 3px;
      font: bold 9pt "Droid Sans", "Noto Sans", Ubuntu, "Bitstream Vera Sans", "Lucida Grande", "DejaVu Sans", Lato, "Segoe UI", Verdana, Helvetica, sans-serif;
@@ -626,9 +603,9 @@ input[type=submit], input.cancel {
 }
 
 input[type=submit]:hover, input.cancel:hover, input[type=submit]:focus, input.cancel:focus {
-     color: #f60;
-     background: #000;
-     border: 1px solid #f60;
+     color: #e6e6e7;
+     background: #332940;
+     border: 1px solid #da736b;
      box-shadow: inset 0 1px 1px 0 #ee9 ;
 }
 
@@ -676,8 +653,8 @@ input[type="text"], input[type="password"], textarea {
      background: #000;
      cursor: text;
      padding: 4px !important;
-     border: 1px solid #363;
-     background: linear-gradient(to bottom, #000 0%, #010 100%) !important;
+     border: 1px solid #332940;
+     /*background: linear-gradient(to bottom, #000 0%, #010 100%) !important;*/
      box-shadow: inset 0 0 3px 3px #000;
      font-size: 9pt;
 }
@@ -690,7 +667,6 @@ input[type="text"]:focus, input[type="password"]:focus, textarea:focus {
 }
 
 input[name="user"] {
-     background: url(/themes/console/images/buttons/user.png) 5px center no-repeat, linear-gradient(to bottom, #000 0%, #010 100%) !important;
      padding: 5px 5px 5px 25px !important;
 }
 
@@ -699,7 +675,6 @@ input[name="user"]:focus {
 }
 
 input[name="pass"] {
-     background: url(/themes/console/images/buttons/password.png) 5px center no-repeat, linear-gradient(to bottom, #000 0%, #010 100%) !important;
      padding: 5px 5px 5px 25px !important;
 }
 
@@ -713,11 +688,10 @@ input.delete {
 
 
 input[type="submit"], input[type="reset"], select, button { /* webkit/blink fix for oversaturated colors */
-     border: 1px solid #8b8;
-     border-bottom: 1px solid #171;
-     border-right: 1px solid #171;
-     background: linear-gradient(to bottom, #020 0%, #000 20%, #000 80%, #010 100%);
-     color: #494;
+     border: 1px solid #292929;
+     background: #1F1A24;
+     color: #e6e6e7;
+     border-radius: 12px;
 }
 
 .page td[colspan="2"] {
@@ -734,19 +708,18 @@ input[type="submit"], input[type="reset"], select, button { /* webkit/blink fix 
 .notifications {
      text-align: center;
      padding: 0 0 20px;
+     position: absolute;
+     bottom: -2.5%;
 }
 
 #dologin {
-     border: 1px solid #494;
      margin: 20px auto;
      width: 600px;
      padding: 0 0 10px;
-     border-radius: 2px;
-     box-shadow: inset 0 0 0 1px #000, inset 0 0 2px 1px #020;
      background: #001000;
      background: linear-gradient(to bottom, #000 0%, #010 50%);
      background: repeating-linear-gradient(135deg, #000 1px, #000 2px, rgba(0,32,0,0.5) 2px, rgba(0,32,0,0.5) 4px), repeating-linear-gradient(45deg, #000 1px, #000 2px, rgba(0,32,0,0.5) 2px, rgba(0,32,0,0.5) 4px), linear-gradient(to bottom, #030 0%, #020);
-     background: linear-gradient(to bottom, #000 0%, #001000 90%);
+     background: #1F1A24;
      background-blend-mode: normal, darken, darken, normal;
      background-blend-mode: difference, normal;
 
@@ -757,7 +730,6 @@ input[type="submit"], input[type="reset"], select, button { /* webkit/blink fix 
 }
 
 #dologin h1 {
-     border: 1px solid #494;
      padding: 10px 10px 10px 48px;
      margin: -1px -1px 15px -1px;
      border-radius: 2px 2px 0 0;
@@ -765,11 +737,9 @@ input[type="submit"], input[type="reset"], select, button { /* webkit/blink fix 
      font-size: 14pt;
      letter-spacing:0.08em;
      word-spacing: 0.1em;
-     text-align:left;
-     background: #002000 url(images/mail.png) 8px center no-repeat;
-     background: url(images/mail.png) 8px center no-repeat, linear-gradient(to bottom, rgba(0,48,0,0.5) 50%, rgba(0,0,0,0.7) 50%), url(/themes/console/dark/images/camotile2.png);
+     text-align: center;
+     background: url(images/mail.png) 8px center no-repeat, #1F1A24;
      text-shadow: 0 1px 1px #000;
-     box-shadow: inset 0 0 0 1px #000;
 }
 
 #dologin table {
@@ -777,6 +747,7 @@ input[type="submit"], input[type="reset"], select, button { /* webkit/blink fix 
      margin-bottom: -9px;
      border-collapse: collapse;
      border-spacing: 0 !important;
+     background: #1F1A24;
 }
 
 #dologin td {
@@ -791,6 +762,7 @@ input[type="submit"], input[type="reset"], select, button { /* webkit/blink fix 
 #dologin td:last-child {
      width: 71%;
      white-space: nowrap;
+     background: #1F1A24;
 }
 
 #dologin td[colspan="2"] {
@@ -820,13 +792,13 @@ input[type="submit"], input[type="reset"], select, button { /* webkit/blink fix 
      padding: 3px 10px;
      border: 1px solid #010;
      border-radius: 25px;
-     background: #020;
+     background: #1F1A24;
      box-shadow: 0 0 1px rgba(0,0,0,0);
+     padding-left: 30px !important;
 }
 
 #dologin tr:last-child a:hover {
-     background: #030;
-     background: linear-gradient(to bottom, #030 50%, #000 50%) #000;
+     background: #332940;
      box-shadow: 0 0 1px #000;
      transition: ease all 0.2s;
 }
@@ -862,7 +834,7 @@ div#composemail {
 }
 
 h3#config {
-     border: 1px solid #494;
+     border: 1px solid #332940;
      padding: 5px;
      margin: 3px auto 18px auto;
      width: 400px;
@@ -895,13 +867,13 @@ p.mailbody {
 
 tr.mailbody:nth-child(n+3), tr.mailbody:nth-child(n+3) td {
      background: #010;
-     border-top: 1px solid #494;
+     border-top: 1px solid #332940;
      padding: 5px;
 }
 
-tr.mailbody:last-child td {
+/*tr.mailbody:last-child td {
      border-bottom: 1px solid #494;
-}
+}*/
 
 div.attached {
      margin: 0 -1px -1px;
@@ -911,7 +883,7 @@ div.attached {
 }
 
 .attached img {
-     border: 1px solid #494;
+     border: 1px solid #332940;
      border-radius: 2px;
      padding: 2px;
      background: #010;
@@ -930,16 +902,19 @@ div#emptymailbox {
 /* pagenav */
 
 table#pagenav {
-     width: 100%;
+     width: 30%;
      margin: 7px auto -3px;
      border-collapse: collapse;
-     border-top: 1px solid #494;
+     /*border-top: 1px solid #494;*/
      background: #000;
      background: linear-gradient(to bottom, #001000 0%, #001900 50%, #000 51%, #000 100%) !important;
      background: repeating-linear-gradient(to right, rgba(0,0,0,0.5) 1px, rgba(0,0,0,0.5) 2px, rgba(0,64,0,0.5) 2px, rgba(0,64,0,0.5) 4px), url(/themes/console/dark/images/camotile2.png), linear-gradient(to bottom, #001000, #000 75%) !important;
      background: none !important;
      background-blend-mode: normal, exclusion, normal;
-     filter: drop-shadow(0 -1px 2px #000);
+     /*filter: drop-shadow(0 -1px 2px #000);*/
+     position: absolute;
+     top: -5px;
+     left: 70%;
 }
 
 #pagenav tr {
@@ -958,8 +933,9 @@ table#pagenav td {
      word-spacing: 0.1em;
      padding: 5px;
      text-align: center;
-     color: #bb7;
+     color: #e6e6e7;
      text-shadow: 0 1px 1px #000;
+     background: #1F1A24;
 }
 
 table#pagenav td:first-child {
@@ -992,14 +968,14 @@ table#pagenav td:last-child {
 
 div#prefsave { /* config page button positioning */
      margin: 20px 0 0;
-     border-top: 1px solid #494;
+     border-top: 1px solid #332940;
      padding: 10px 0 10px;
 }
 
 .iframed #prefsave {
      margin-bottom: 0;
      padding-top: 15px;
-     border-bottom: 1px solid #494;
+     border-bottom: 1px solid #332940;
 }
 
 #prefsave input[type="submit"] {
@@ -1013,11 +989,11 @@ table#mailbox {
 
 div#prefsave {
      padding-bottom: 5px;
-     border-bottom: 1px solid #494;
+     border-bottom: 1px solid #332940;
 }
 
 .iframed .page {
-     border-bottom: 1px solid #494;
+     border-bottom: 1px solid #332940;
 }
 }
 
@@ -1128,16 +1104,56 @@ div#prefsave {
 }
 
 input.switchto {
-     background: #000 url(/themes/susimail/images/folder.png) center center no-repeat !important;
+     background: #292929 url(images/folder.png) center center no-repeat !important;
      background-size: 12px 12px !important;
      margin: -34px 3px 5px 3px !important;
 }
 
 input.switchto:hover,
 input.switchto:focus {
-     background: #000 url(/themes/susimail/images/folder-open.png) center center no-repeat !important;
+     background: #292929 url(images/folder.png) center center no-repeat !important;
      background-size: 12px 12px !important;
      border: 1px solid #f60;
+}
+
+input.login {
+    background: url(images/login.png) 8px center no-repeat, #1F1A24 !important;
+    padding-left: 18px !important;
+}
+
+input.offline {
+    background: url(images/offline.png) 8px center no-repeat, #1F1A24 !important;
+    padding-left: 30px !important;
+}
+
+input.configure {
+    background: url(images/settings.png) 8px center no-repeat, #1F1A24 !important;
+    padding-left: 30px !important;
+}
+
+input.new {
+   background: url(images/edit.png) 8px center no-repeat, #1F1A24 !important;;
+   padding-left: 30px !important;
+}
+
+input.logout {
+   background: url(images/logout.png) 8px center no-repeat, #1F1A24 !important;;
+   padding-left: 30px !important;
+}
+
+input.refresh {
+   background: url(images/refresh.png) 8px center no-repeat, #1F1A24 !important;;
+   padding-left: 30px !important;
+}
+
+a.mailhelp {
+    background: url(images/help.png) 8px center no-repeat, #1F1A24 !important;
+    padding-left: 30px !important;
+}
+
+a.mailcreate {
+    background: url(images/account.png) 8px center no-repeat, #1F1A24 !important;
+    padding-left: 30px !important;
 }
 
 select {

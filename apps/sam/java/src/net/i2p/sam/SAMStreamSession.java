@@ -85,7 +85,8 @@ class SAMStreamSession implements SAMMessageSess {
      *
      * Caller MUST call start().
      *
-     * @param dest Base64-encoded destination and private keys (same format as PrivateKeyFile)
+     * @param dest Base64-encoded destination and private keys,
+     *             and optional offline signature section (same format as PrivateKeyFile)
      * @param dir Session direction ("RECEIVE", "CREATE" or "BOTH") or "__v3__" if extended by SAMv3StreamSession
      * @param props Properties to setup the I2P session
      * @param recv Object that will receive incoming data
@@ -101,7 +102,10 @@ class SAMStreamSession implements SAMMessageSess {
     /**
      * Create a new SAM STREAM session.
      *
-     * @param destStream Input stream containing the destination and private keys (same format as PrivateKeyFile)
+     * Caller MUST call start().
+     *
+     * @param destStream Input stream containing the binary destination and private keys,
+     *                   and optional offline signature section (same format as PrivateKeyFile)
      * @param dir Session direction ("RECEIVE", "CREATE" or "BOTH") or "__v3__" if extended by SAMv3StreamSession
      * @param props Properties to setup the I2P session
      * @param recv Object that will receive incoming data
@@ -146,12 +150,14 @@ class SAMStreamSession implements SAMMessageSess {
         allprops.putAll(props);
 
         String i2cpHost = allprops.getProperty(I2PClient.PROP_TCP_HOST, "127.0.0.1");
-        int i2cpPort = 7654;
-        String port = allprops.getProperty(I2PClient.PROP_TCP_PORT, "7654");
-        try {
-            i2cpPort = Integer.parseInt(port);
-        } catch (NumberFormatException nfe) {
-            throw new SAMException("Invalid I2CP port specified [" + port + "]");
+        int i2cpPort = I2PClient.DEFAULT_LISTEN_PORT;
+        String sport = allprops.getProperty(I2PClient.PROP_TCP_PORT);
+        if (sport != null) {
+            try {
+                i2cpPort = Integer.parseInt(sport);
+            } catch (NumberFormatException nfe) {
+                throw new SAMException("Invalid I2CP port specified [" + sport + "]");
+            }
         }
         if (!canReceive)
             allprops.setProperty("i2cp.dontPublishLeaseSet", "true");

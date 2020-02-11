@@ -1,11 +1,9 @@
 package net.i2p.router.web.helpers;
 
 import java.text.Collator;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
@@ -140,13 +138,16 @@ public class ConfigClientsHelper extends HelperBase {
             boolean isConsole = ca.className.equals("net.i2p.router.web.RouterConsoleRunner");
             boolean showStart;
             boolean showStop;
+            boolean showEdit;
             if (isConsole) {
                 showStart = false;
                 showStop = false;
+                showEdit = true;
             } else {
                 ClientApp clientApp = _context.routerAppManager().getClientApp(ca.className, LoadClientAppsJob.parseArgs(ca.args));
                 showStart = clientApp == null;
                 showStop = clientApp != null && clientApp.getState() == ClientAppState.RUNNING;
+                showEdit = !showStop && (clientApp == null || clientApp.getState() != ClientAppState.STARTING);
             }
             String scur = Integer.toString(cur);
             renderForm(buf, scur, ca.clientName,
@@ -161,8 +162,9 @@ public class ConfigClientsHelper extends HelperBase {
                        // edit
                        allowEdit && scur.equals(_edit),
                        // show edit button, show update button
-                       // Don't allow edit if it's running, or else we would lose the "handle" to the ClientApp to stop it.
-                       allowEdit && !showStop, false, 
+                       // Don't allow edit if it's running or starting, or else we would lose the "handle" to the ClientApp to stop it.
+                       allowEdit && showEdit,
+                       false, 
                        // show stop button
                        showStop,
                        // show delete button, show start button
@@ -215,7 +217,7 @@ public class ConfigClientsHelper extends HelperBase {
             if (name.startsWith(RouterConsoleRunner.PREFIX) && name.endsWith(RouterConsoleRunner.ENABLED)) {
                 String app = name.substring(RouterConsoleRunner.PREFIX.length(), name.lastIndexOf(RouterConsoleRunner.ENABLED));
                 String val = props.getProperty(name);
-                boolean isRunning = WebAppStarter.isWebAppRunning(app);
+                boolean isRunning = WebAppStarter.isWebAppRunning(_context, app);
                 String desc;
                 // use descriptions already tagged elsewhere
                 if (app.equals("routerconsole"))
@@ -256,7 +258,8 @@ public class ConfigClientsHelper extends HelperBase {
            .append(_t("Control")).append("</th><th align=\"left\">")
            .append(_t("Description")).append("</th></tr>\n");
         Properties props = PluginStarter.pluginProperties();
-        Set<String> keys = new TreeSet<String>(props.stringPropertyNames());
+        Set<String> keys = new TreeSet<String>(Collator.getInstance());
+        keys.addAll(props.stringPropertyNames());
         for (String name : keys) {
             if (name.startsWith(PluginStarter.PREFIX) && name.endsWith(PluginStarter.ENABLED)) {
                 String app = name.substring(PluginStarter.PREFIX.length(), name.lastIndexOf(PluginStarter.ENABLED));
@@ -285,7 +288,7 @@ public class ConfigClientsHelper extends HelperBase {
                         ms = Long.parseLong(s);
                     } catch (NumberFormatException nfe) {}
                     if (ms > 0) {
-                        String date = (new SimpleDateFormat("yyyy-MM-dd HH:mm")).format(new Date(ms));
+                        String date = DataHelper.formatTime(ms);
                         desc.append("<tr><td><b>")
                             .append(_t("Date")).append("</b></td><td>").append(date);
                     }

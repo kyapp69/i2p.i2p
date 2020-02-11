@@ -15,6 +15,8 @@ import net.i2p.data.router.RouterInfo;
 import net.i2p.data.router.RouterKeyGenerator;
 import net.i2p.internal.InternalClientManager;
 import net.i2p.router.client.ClientManagerFacadeImpl;
+import net.i2p.router.crypto.ElGamalAESEngine;
+import net.i2p.router.crypto.ratchet.ECIESAEADEngine;
 import net.i2p.router.crypto.TransientSessionKeyManager;
 import net.i2p.router.dummy.*;
 import net.i2p.router.message.GarlicMessageParser;
@@ -68,6 +70,8 @@ public class RouterContext extends I2PAppContext {
     private RouterAppManager _appManager;
     private RouterKeyGenerator _routingKeyGenerator;
     private GarlicMessageParser _garlicMessageParser;
+    private ElGamalAESEngine _elGamalAESEngine;
+    private ECIESAEADEngine _eciesEngine;
     private final Set<Runnable> _finalShutdownTasks;
     // split up big lock on this to avoid deadlocks
     private volatile boolean _initialized;
@@ -77,11 +81,15 @@ public class RouterContext extends I2PAppContext {
     
     /**
      *  Caller MUST call initAll() after instantiation.
+     *
+     *  @param router may be null for unit tests if you are careful
      */
     public RouterContext(Router router) { this(router, null); }
 
     /**
      *  Caller MUST call initAll() after instantiation.
+     *
+     *  @param router may be null for unit tests if you are careful
      */
     public RouterContext(Router router, Properties envProps) { 
         this(router, envProps, true);
@@ -91,6 +99,7 @@ public class RouterContext extends I2PAppContext {
      *  Caller MUST call initAll() after instantiation.
      *  NOT a public API, for use by Router only, NOT for external use.
      *
+     *  @param router may be null for unit tests if you are careful
      *  @param doInit should this context be used as the global one (if necessary)?
      *                Will only apply if there is no global context now.
      *                If false, caller should call setGlobalContext() afterwards.
@@ -99,6 +108,11 @@ public class RouterContext extends I2PAppContext {
     RouterContext(Router router, Properties envProps, boolean doInit) { 
         super(doInit, filterProps(envProps));
         _router = router;
+        if (router == null) {
+            // disable NTP when doing unit tests
+            setProperty("time.disabled", "true");
+        }
+
         // Disabled here so that the router can get a context and get the
         // directory locations from it, to do an update, without having
         // to init everything. Caller MUST call initAll() afterwards.
@@ -211,6 +225,8 @@ public class RouterContext extends I2PAppContext {
             _clientManagerFacade = new DummyClientManagerFacade(this);
             // internal client manager is null
         }
+        _elGamalAESEngine = new ElGamalAESEngine(this);
+        _eciesEngine = new ECIESAEADEngine(this);
         _garlicMessageParser = new GarlicMessageParser(this);
         _clientMessagePool = new ClientMessagePool(this);
         _jobQueue = new JobQueue(this);
@@ -666,5 +682,28 @@ public class RouterContext extends I2PAppContext {
      */
     public GarlicMessageParser garlicMessageParser() {
         return _garlicMessageParser;
+    }
+
+    /**
+     * Access the ElGamal/AES+SessionTag engine for this context.  The algorithm
+     * makes use of the context's sessionKeyManager to coordinate transparent
+     * access to the sessionKeys and sessionTags, as well as the context's elGamal
+     * engine (which in turn keeps stats, etc).
+     *
+     * @since 0.9.38 moved from superclass (app context)
+     */
+    public ElGamalAESEngine elGamalAESEngine() {
+        return _elGamalAESEngine;
+    }
+
+    /**
+     * Access the ECIES/AEAD engine for this context.  The algorithm
+     * makes use of the sessionKeyManager to coordinate transparent
+     * access to the sessionKeys and sessionTags.
+     *
+     * @since 0.9.44
+     */
+    public ECIESAEADEngine eciesEngine() {
+        return _eciesEngine;
     }
 }

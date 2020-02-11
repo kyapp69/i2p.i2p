@@ -18,6 +18,7 @@ import java.util.Set;
 import net.i2p.data.DatabaseEntry;
 import net.i2p.data.Hash;
 import net.i2p.data.LeaseSet;
+import net.i2p.data.LeaseSet2;
 import net.i2p.data.router.RouterInfo;
 import net.i2p.router.RouterContext;
 import net.i2p.util.Log;
@@ -99,7 +100,7 @@ class TransientDataStore implements DataStore {
     public int countLeaseSets() {
         int count = 0;
         for (DatabaseEntry d : _data.values()) {
-            if (d.getType() == DatabaseEntry.KEY_TYPE_LEASESET)
+            if (d.isLeaseSet())
                 count++;
         }
         return count;
@@ -122,7 +123,8 @@ class TransientDataStore implements DataStore {
             _log.debug("Storing key " + key);
         DatabaseEntry old = _data.putIfAbsent(key, data);
         boolean rv = false;
-        if (data.getType() == DatabaseEntry.KEY_TYPE_ROUTERINFO) {
+        int type = data.getType();
+        if (type == DatabaseEntry.KEY_TYPE_ROUTERINFO) {
             // Don't do this here so we don't reset it at router startup;
             // the StoreMessageJob calls this
             //_context.profileManager().heardAbout(key);
@@ -148,21 +150,33 @@ class TransientDataStore implements DataStore {
                     _log.info("New router for " + key + ": published on " + new Date(ri.getPublished()));
                 rv = true;
             }
-        } else if (data.getType() == DatabaseEntry.KEY_TYPE_LEASESET) {
+        } else if (DatabaseEntry.isLeaseSet(type)) {
             LeaseSet ls = (LeaseSet)data;
             if (old != null) {
                 LeaseSet ols = (LeaseSet)old;
-                if (ls.getEarliestLeaseDate() < ols.getEarliestLeaseDate()) {
+                long oldDate, newDate;
+                if (type != DatabaseEntry.KEY_TYPE_LEASESET &&
+                    ols.getType() != DatabaseEntry.KEY_TYPE_LEASESET) {
+                    LeaseSet2 ls2 = (LeaseSet2) ls;
+                    LeaseSet2 ols2 = (LeaseSet2) ols;
+                    oldDate = ols2.getPublished();
+                    newDate = ls2.getPublished();
+                } else {
+                    oldDate = ols.getEarliestLeaseDate();
+                    newDate = ls.getEarliestLeaseDate();
+                }
+
+                if (newDate < oldDate) {
                     if (_log.shouldLog(Log.INFO))
-                        _log.info("Almost clobbered an old leaseSet! " + key + ": [old expires " + new Date(ols.getEarliestLeaseDate()) +
-                                  " new on " + new Date(ls.getEarliestLeaseDate()) + ']');
-                } else if (ls.getEarliestLeaseDate() == ols.getEarliestLeaseDate()) {
+                        _log.info("Almost clobbered an old leaseSet! " + key + ": [old " + new Date(oldDate) +
+                                  " new " + new Date(newDate) + ']');
+                } else if (newDate == oldDate) {
                     if (_log.shouldLog(Log.INFO))
                         _log.info("Duplicate " + key);
                 } else {
                     if (_log.shouldLog(Log.INFO)) {
-                        _log.info("Updated old leaseSet " + key + ": [old expires " + new Date(ols.getEarliestLeaseDate()) +
-                                  " new on " + new Date(ls.getEarliestLeaseDate()) + ']');
+                        _log.info("Updated old leaseSet " + key + ": [old " + new Date(oldDate) +
+                                  " new " + new Date(newDate) + ']');
                         if (_log.shouldLog(Log.DEBUG))
                             _log.debug("RAP? " + ls.getReceivedAsPublished() + " RAR? " + ls.getReceivedAsReply());
                     }

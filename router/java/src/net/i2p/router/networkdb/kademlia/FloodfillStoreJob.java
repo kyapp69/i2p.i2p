@@ -13,6 +13,8 @@ import java.util.Set;
 
 import net.i2p.data.DatabaseEntry;
 import net.i2p.data.Hash;
+import net.i2p.data.LeaseSet;
+import net.i2p.data.LeaseSet2;
 import net.i2p.router.Job;
 import net.i2p.router.RouterContext;
 import net.i2p.util.Log;
@@ -40,7 +42,8 @@ class FloodfillStoreJob extends StoreJob {
      * @param toSkip set of peer hashes of people we dont want to send the data to (e.g. we
      *               already know they have it).  This can be null.
      */
-    public FloodfillStoreJob(RouterContext context, FloodfillNetworkDatabaseFacade facade, Hash key, DatabaseEntry data, Job onSuccess, Job onFailure, long timeoutMs, Set<Hash> toSkip) {
+    public FloodfillStoreJob(RouterContext context, FloodfillNetworkDatabaseFacade facade, Hash key, DatabaseEntry data,
+                             Job onSuccess, Job onFailure, long timeoutMs, Set<Hash> toSkip) {
         super(context, facade, key, data, onSuccess, onFailure, timeoutMs, toSkip);
         _facade = facade;
     }
@@ -58,35 +61,57 @@ class FloodfillStoreJob extends StoreJob {
     protected void succeed() {
         super.succeed();
 
-            if (_facade.isVerifyInProgress(_state.getTarget())) {
-                if (_log.shouldLog(Log.INFO))
-                    _log.info("Skipping verify, one already in progress for: " + _state.getTarget());
+        final boolean shouldLog = _log.shouldInfo();
+        final Hash key = _state.getTarget();
+
+            if (_facade.isVerifyInProgress(key)) {
+                if (shouldLog)
+                    _log.info("Skipping verify, one already in progress for: " + key);
                 return;
             }
             if (getContext().router().gracefulShutdownInProgress()) {
-                if (_log.shouldLog(Log.INFO))
-                    _log.info("Skipping verify, shutdown in progress for: " + _state.getTarget());
+                if (shouldLog)
+                    _log.info("Skipping verify, shutdown in progress for: " + key);
                 return;
             }
             // Get the time stamp from the data we sent, so the Verify job can meke sure that
             // it finds something stamped with that time or newer.
             DatabaseEntry data = _state.getData();
-            boolean isRouterInfo = data.getType() == DatabaseEntry.KEY_TYPE_ROUTERINFO;
+            final int type = data.getType();
+            final boolean isRouterInfo = type == DatabaseEntry.KEY_TYPE_ROUTERINFO;
             // default false since 0.9.7.1
             if (isRouterInfo && !getContext().getBooleanProperty(PROP_RI_VERIFY)) {
                 _facade.routerInfoPublishSuccessful();
                 return;
             }
 
-            long published = data.getDate();
-
+            final boolean isls2 = data.isLeaseSet() && type != DatabaseEntry.KEY_TYPE_LEASESET;
+            long published;
+            if (isls2) {
+                LeaseSet2 ls2 = (LeaseSet2) data;
+                published = ls2.getPublished();
+            } else {
+                published = data.getDate();
+            }
             // we should always have exactly one successful entry
             Hash sentTo = null;
             try {
                 sentTo = _state.getSuccessful().iterator().next();
             } catch (NoSuchElementException nsee) {}
-            getContext().jobQueue().addJob(new FloodfillVerifyStoreJob(getContext(), _state.getTarget(),
-                                                                       published, isRouterInfo, sentTo, _facade));
+            Hash client;
+            if (type == DatabaseEntry.KEY_TYPE_ENCRYPTED_LS2) {
+                // get the real client hash
+                client = ((LeaseSet)data).getDestination().calculateHash();
+            } else {
+                client = key;
+            }
+            Job fvsj = new FloodfillVerifyStoreJob(getContext(), key, client,
+                                                   published, type,
+                                                   sentTo, _facade);
+            if (shouldLog)
+                _log.info(getJobId() + ": Succeeded sending key " + key +
+                          ", queueing verify job " + fvsj.getJobId());
+            getContext().jobQueue().addJob(fvsj);
     }
     
     @Override

@@ -5,21 +5,16 @@
 body {
      color: #31334f;
      font: 9pt "Droid Sans", "Noto Sans", Ubuntu, "Segoe UI", "Bitstream Vera Sans", Verdana, "Lucida Grande", Helvetica, sans-serif;
-     background: #a4a4cb url(/themes/console/light/images/tile2.png) center top scroll;
-     background-size: 32px 32px;
+     background: linear-gradient(135deg, #9dabd5 0%,#265ea7 53%,#222187 76%,#323638 100%);
+     background: -webkit-linear-gradient(-45deg, #9dabd5 0%,#265ea7 53%,#222187 76%,#323638 100%);
+
      margin: 3px 4px;
 }
 
 /* preload top navigation mouseovers */
 body {
-     background: url(images/tile2.png) scroll,
-     url(images/button_snark_hover.png) no-repeat,
-     url(images/button_snark_active.png) no-repeat,
-     url(images/button_tracker_hover.png) no-repeat,
-     url(images/button_tracker_active.png) no-repeat,
-     url(images/button_forum_hover.png) no-repeat,
-     url(images/button_forum_active.png) no-repeat, #a4a4cb;
-     background-size: 32px 32px, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0;
+  background: linear-gradient(135deg, #9dabd5 0%,#265ea7 53%,#222187 76%,#323638 100%);
+  background: -webkit-linear-gradient(-45deg, #9dabd5 0%,#265ea7 53%,#222187 76%,#323638 100%);
 }
 
 @supports (text-justify: auto) { /* only Firefox 55 or newer */
@@ -66,6 +61,7 @@ b {
 .toggleview, .snarkConfigTitle, .snarknavbar, img, input[type="image"] {
      -moz-user-select: none;
      -webkit-user-select: none;
+     -ms-user-select: none;
      user-select: none;
 }
 
@@ -352,8 +348,8 @@ a:link {
 }
 
 a:visited {
-     color: #2c4e8f;
-     color: rgba(44, 78, 143, 0.9);
+     color: #3b6bbf;
+     color: rgba(59, 107, 191, .85);
      text-decoration: none;
 }
 
@@ -691,10 +687,6 @@ th.snarkGraphicStatus, th.snarkTorrentStatus {
      white-space: nowrap;
 }
 
-.choked, .unchoked {
-     font-style: italic;
-}
-
 .choked {
      color: #a00 !important;
 }
@@ -823,7 +815,7 @@ tr:hover .percentBarText {
 /* download bars */
 
 .snarkTorrentDownloaded {
-     width: 110px !important;
+     width: 130px !important;
      text-align: center !important;
 }
 
@@ -910,7 +902,7 @@ tr:hover .percentBarText {
 }
 
 .snarkTorrentDownloaded .percentBarText, .snarkTorrentDownloaded .percentBarOuter {
-     width: 110px !important;
+     width: 130px !important;
 }
 
 .snarkDirInfo .percentBarText, .snarkDirInfo .percentBarOuter, .peerinfo .percentBarText, .peerinfo .percentBarOuter {
@@ -1106,6 +1098,7 @@ tr:hover .percentBarText {
      color: #070;
      -moz-user-select: all;
      -webkit-user-select: all;
+     -ms-user-select: all;
      user-select: all;
 }
 
@@ -1444,16 +1437,6 @@ img:hover {
      line-height: 100%;
 }
 
-img[src$="magnet.png"] {
-     transform: rotate(-90deg);
-}
-
-@media screen and (-webkit-min-device-pixel-ratio: 0) {
-img[src$="magnet.png"] {
-     transform: none;
-}
-}
-
 img[src$="details.png"] {
      opacity: 0.8;
 }
@@ -1780,12 +1763,6 @@ input#toggle_addtorrent:checked + label + hr + table, input#toggle_createtorrent
      line-height: 120%;
 }
 
-.debuginfo td:first-child {
-     background: url(images/debuginfo.png) center center no-repeat;
-     background-size: 14px 14px;
-     background-blend-mode: luminosity;
-}
-
 .debuginfo b {
      text-transform: capitalize;
      font-family: "Droid Sans", "Noto Sans", Ubuntu, "Segoe UI", "Bitstream Vera Sans", Verdana, "Lucida Grande", Helvetica, sans-serif;
@@ -2087,7 +2064,7 @@ hr.debug:last-child {
 #torrentInfoStats span {
      white-space: nowrap;
      display: inline-block;
-     margin-right: 7px;
+     margin-right: 8px;
 }
 
 /* Comments Section */
@@ -2202,7 +2179,6 @@ hr.debug:last-child {
 
 .commentText {
      white-space: normal !important;
-     text-align: justify;
      width: 90%;
 }
 
@@ -2406,7 +2382,7 @@ _:-ms-lang(x), *, *:hover, *:focus, input, input:hover, input:focus, a:hover, a:
 }
 
 .snarkTorrentETA, .snarkTorrentUploaded, .snarkTorrentRateDown, .snarkTorrentRateUp {
-     min-width: 0;
+     min-width: 70;
 }
 
 .snarkTorrents thead img {
@@ -2543,7 +2519,7 @@ b.alwaysShow {
 }
 
 .snarkTorrentDownloaded .percentBarText, .snarkTorrentDownloaded .percentBarOuter {
-     width: 100px !important;
+     width: 130px !important;
 }
 
 .peerinfo .snarkTorrentDownloaded .percentBarText, .peerinfo .snarkTorrentDownloaded .percentBarOuter {
@@ -2730,4 +2706,3 @@ a, a:link, th, td, button, input, select, textarea {
      background: #f60 url(images/button_tracker_active.png) left 3px center no-repeat !important;
      background-size: 14px auto !important;
 }
-

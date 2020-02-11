@@ -1,14 +1,11 @@
 <%@page contentType="text/html"%>
 <%@page pageEncoding="UTF-8"%>
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-
 <html><head>
 <%@include file="css.jsi" %>
 <%=intl.title("config service")%>
-<script src="/js/ajax.js" type="text/javascript"></script>
 <%@include file="summaryajax.jsi" %>
-</head><body onload="initAjax()">
-
+</head><body>
 <%@include file="summary.jsi" %>
 <h1><%=intl._t("I2P Service Configuration")%></h1>
 <div class="main" id="config_service">
@@ -29,7 +26,7 @@
      <input type="submit" class="cancel" name="action" value="<%=intl._t("Cancel graceful shutdown")%>" >
  <% } %>
  </div>
- <% if (System.getProperty("wrapper.version") != null) { %>
+ <% if (net.i2p.util.SystemVersion.hasWrapper()) { %>
  <h3 class="ptitle" id="restartrouter"><%=intl._t("Restart the router")%></h3>
  <p class="infohelp">
     <%=intl._t("If you want the router to restart itself after shutting down, you can choose one of the following.")%>
@@ -72,7 +69,7 @@
 
  <h3 class="ptitle" id="servicedebug"><%=intl._t("Debugging")%>&nbsp;<a href="/jobs">[<%=intl._t("View the job queue")%>]</a></h3>
  <p class="infohelp">
-<% if (System.getProperty("wrapper.version") != null) { %>
+<% if (net.i2p.util.SystemVersion.hasWrapper()) { %>
     <%=intl._t("At times, it may be helpful to debug I2P by getting a thread dump. To do so, please select the following option and review the thread dumped to <a href=\"logs.jsp#servicelogs\">wrapper.log</a>.")%>
 <% } else { // hack to make layout work for non-wrapper %>
     &nbsp;
@@ -81,7 +78,7 @@
  <hr>
  <div class="formaction" id="dumpthreads">
  <input type="submit" class="reload" name="action" value="<%=intl._t("Force GC")%>" >
-<% if (System.getProperty("wrapper.version") != null) { %>
+<% if (net.i2p.util.SystemVersion.hasWrapper()) { %>
  <input type="submit" class="download" name="action" value="<%=intl._t("Dump threads")%>" >
 <% } %>
  </div>

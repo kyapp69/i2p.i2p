@@ -467,7 +467,7 @@ public class Snark
             try { storage.close(); } catch (IOException ioee) {
                 ioee.printStackTrace();
             }
-            fatal("Could not check or create storage", ioe);
+            fatal("Could not check or create files for " + getBaseInfo(), ioe);
           }
       }
 
@@ -552,6 +552,8 @@ public class Snark
    * @throws RuntimeException via fatal()
    */
   public synchronized void startTorrent() {
+      if (!stopped)
+          return;
       starting = true;
       try {
           x_startTorrent();
@@ -609,7 +611,7 @@ public class Snark
                  try { storage.close(); } catch (IOException ioee) {
                      ioee.printStackTrace();
                  }
-                 fatal("Could not reopen storage", ioe);
+                 fatal("Could not open file for " + getBaseInfo(), ioe);
              }
         }
         trackerclient.start();
@@ -648,18 +650,22 @@ public class Snark
         // TODO: Cache the config-in-mem to compare vs config-on-disk
         // (needed for auto-save to not double-save in some cases)
         long nowUploaded = getUploaded();
-        boolean changed = storage.isChanged() || nowUploaded != savedUploaded;
+        // If autoStart is enabled, always save the config, so we know
+        // whether to start it up next time
+        boolean changed = storage.isChanged() || nowUploaded != savedUploaded ||
+                          (completeListener != null && completeListener.shouldAutoStart());
         try { 
             storage.close(); 
         } catch (IOException ioe) {
-            System.out.println("Error closing " + torrent);
+            if (_log.shouldWarn())
+                _log.warn("Error closing " + torrent);
             ioe.printStackTrace();
         }
         savedUploaded = nowUploaded;
-        if (changed && completeListener != null)
-            completeListener.updateStatus(this);
-        // TODO should save comments at shutdown even if never started...
+        // SnarkManager.stopAllTorrents() will save comments at shutdown even if never started...
         if (completeListener != null) {
+            if (changed)
+                completeListener.updateStatus(this);
             synchronized(_commentLock) {
                 if (_comments != null) {
                     synchronized(_comments) {
@@ -703,6 +709,19 @@ public class Snark
     public String getBaseName() {
         if (storage != null)
             return storage.getBaseName();
+        return torrent;
+    }
+
+    /**
+     *  @return base name for torrent [filtered version of getMetaInfo.getName()],
+     *          or a fake name if in magnet mode, followed by path info and error message,
+     *          for error logging only
+     *  @since 0.9.44
+     */
+    private String getBaseInfo() {
+        if (storage != null)
+            return storage.getBaseName() + " at " +
+                   storage.getBase() + " - check that device is present and writable";
         return torrent;
     }
 
@@ -1229,6 +1248,8 @@ public class Snark
               baseFile = new File(rootDataDir, base);
           else
               baseFile = new SecureFile(rootDataDir, base);
+          if (baseFile.exists())
+              throw new IOException("Data location already exists: " + baseFile);
           // The following two may throw IOE...
           storage = new Storage(_util, baseFile, metainfo, this, false);
           storage.check();
@@ -1250,7 +1271,7 @@ public class Snark
           }
           // TODO we're still in an inconsistent state, won't work if restarted
           // (PeerState "disconnecting seed that connects to seeds"
-          fatal("Could not create data files", ioe);
+          fatal("Could not create file for " + getBaseInfo(), ioe);
       }
   }
 

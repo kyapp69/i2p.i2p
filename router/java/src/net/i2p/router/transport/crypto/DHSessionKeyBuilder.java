@@ -487,6 +487,17 @@ public class DHSessionKeyBuilder {
         }
 
         public void run() {
+            try {
+                run2();
+            } catch (IllegalStateException ise) {
+                if (_isRunning)
+                    throw ise;
+                // else ignore, thread can be slow to shutdown on Android,
+                // PRNG gets stopped first and throws ISE
+            }
+        }
+
+        private void run2() {
             _isRunning = true;
             while (_isRunning) {
                 //long start = System.currentTimeMillis();
@@ -571,12 +582,14 @@ public class DHSessionKeyBuilder {
          * @since 0.9.16
          */
         public void returnUnused(DHSessionKeyBuilder builder) {
+/*
             if (builder.getPeerPublicValue() != null) {
                 _log.error("builder returned used", new Exception());
                 return;
             }
             _context.statManager().addRateData("crypto.DHReused", 1);
             _builders.offer(builder);
+*/
         }
 
         /** @return true if successful, false if full */

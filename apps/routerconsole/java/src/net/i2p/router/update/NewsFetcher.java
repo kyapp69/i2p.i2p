@@ -12,7 +12,6 @@ import java.io.Writer;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
-import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -264,8 +263,8 @@ class NewsFetcher extends UpdateRunner {
                             }
                             String minJava = args.get(MIN_JAVA_VERSION_KEY);
                             if (minJava != null) {
-                                String ourJava = System.getProperty("java.version");
-                                if (VersionComparator.comp(ourJava, minJava) < 0) {
+                                if (!SystemVersion.isJava(minJava)) {
+                                    String ourJava = System.getProperty("java.version");
                                     String msg = _mgr._t("Requires Java version {0} but installed Java version is {1}", minJava, ourJava);
                                     _log.logAlways(Log.WARN, "Cannot update to version " + ver + ": " + msg);
                                     _mgr.notifyVersionConstraint(this, _currentURI, ROUTER_SIGNED, "", ver, msg);
@@ -635,8 +634,6 @@ class NewsFetcher extends UpdateRunner {
         }
         Blocklist bl = _context.blocklist();
         Banlist ban = _context.banlist();
-        DateFormat fmt = DateFormat.getDateInstance(DateFormat.SHORT);
-        fmt.setTimeZone(SystemVersion.getSystemTimeZone(_context));
         String reason = "Blocklist feed " + new Date(ble.updated);
         int banned = 0;
         for (Iterator<String> iter = ble.entries.iterator(); iter.hasNext(); ) {
@@ -764,16 +761,13 @@ class NewsFetcher extends UpdateRunner {
             out.write("-->\n");
             if (entries == null)
                 return;
-            DateFormat fmt = DateFormat.getDateInstance(DateFormat.SHORT);
-            // the router sets the JVM time zone to UTC but saves the original here so we can get it
-            fmt.setTimeZone(SystemVersion.getSystemTimeZone(_context));
             for (NewsEntry e : entries) {
                 if (e.title == null || e.content == null)
                     continue;
-                Date date = new Date(e.updated);
-                out.write("<!-- Entry Date: " + date + " -->\n");
+                out.write("<!-- Entry Date: " + e.updated + " -->\n");
                 out.write("<h3>");
-                out.write(fmt.format(date));
+                // Warning - update NewsHandler.parseNews() if you change the format
+                out.write(DataHelper.formatDate(e.updated));
                 out.write(": ");
                 out.write(e.title);
                 out.write("</h3>\n");

@@ -30,6 +30,7 @@
 		<pathelement location="lib/standard.jar" />
 		<pathelement location="${lib}/jasper-runtime.jar" />
 		<pathelement location="${lib}/jetty-util.jar" />
+		<pathelement location="${lib}/jetty-i2p.jar" />
 		<pathelement location="${ant.home}/lib/ant.jar" />
 		<pathelement location="../../../core/java/build/i2p.jar" />
 		<pathelement location="../../addressbook/dist/addressbook.jar" />
@@ -47,6 +48,7 @@
 		<mkdir dir="${bin}" />
 		<javac debug="true" deprecation="on" source="${javac.version}" target="${javac.version}" 
 			includeAntRuntime="false"
+			encoding="UTF-8"
  			classpathref="cp" destdir="${bin}" srcdir="${src}" includes="**/*.java" >
 			<compilerarg line="${javac.compilerargs}" />
 		</javac>
@@ -69,7 +71,13 @@
         <delete file="WEB-INF/web-out.xml" />
     	<mkdir dir="${tmp}" />
         <echo message="Ignore any warning about /WEB-INF/web.xml not found" />
-        <java classname="org.apache.jasper.JspC" fork="true" classpathref="cp" failonerror="true">
+        <!-- See apps/routerconsole/java/build.xml for important JspC build documentation -->
+        <java classname="net.i2p.servlet.util.JspC" fork="true" classpathref="cp" failonerror="true">
+            <!-- these are to detect tomcat version and reproducible build setting -->
+            <jvmarg value="-Dbuild.reproducible=${build.reproducible}" />
+            <jvmarg value="-Dwith-libtomcat8-java=${with-libtomcat8-java}" />
+            <jvmarg value="-Dwith-libtomcat9-java=${with-libtomcat9-java}" />
+            <jvmarg value="-Djasper.jar=${lib}/jasper-runtime.jar" />
             <arg value="-d" />
             <arg value="${tmp}" />
             <arg value="-v" />
@@ -82,6 +90,7 @@
         </java>
         <javac debug="true" deprecation="on" source="${javac.version}" target="${javac.version}" 
                includeAntRuntime="false"
+               encoding="UTF-8"
                destdir="${bin}" srcdir="${tmp}" includes="**/*.java" classpathref="cp">
 		<compilerarg line="${javac.compilerargs}" />
          </javac>
@@ -89,6 +98,19 @@
         <loadfile property="jspc.web.fragment" srcfile="WEB-INF/web-fragment.xml" />
         <replace file="WEB-INF/web-out.xml">
             <replacefilter token="&lt;!-- precompiled servlets --&gt;" value="${jspc.web.fragment}" />
+        </replace>
+        <!-- Add multipart config to servlets that need them -->
+        <property name="__match1" value="&lt;servlet-class&gt;i2p.susi.dns.jsp." />
+        <property name="__match2" value="_jsp&lt;/servlet-class&gt;" />
+        <property name="__class1" value="${__match1}addressbook${__match2}" />
+        <property name="__multipart" value="&#10;
+       &lt;multipart-config&gt;&#10;
+           &lt;max-file-size&gt;67108864&lt;/max-file-size&gt;&#10;
+           &lt;max-request-size&gt;67108864&lt;/max-request-size&gt;&#10;
+           &lt;file-size-threshold&gt;262144&lt;/file-size-threshold&gt;&#10;
+       &lt;/multipart-config&gt;" />
+        <replace file="WEB-INF/web-out.xml">
+            <replacefilter token="${__class1}" value="${__class1}${__multipart}" />
         </replace>
     </target>
 
@@ -163,6 +185,7 @@
         </exec>
         <javac source="${javac.version}" target="${javac.version}" 
                includeAntRuntime="false"
+               encoding="UTF-8"
                srcdir="build/messages-src" destdir="${bin}">
             <compilerarg line="${javac.compilerargs}" />
         </javac>

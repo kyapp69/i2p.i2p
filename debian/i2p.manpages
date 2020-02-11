@@ -1,4 +1,5 @@
 installer/resources/man/i2prouter.1
+installer/resources/man/i2prouter.ar.1
 installer/resources/man/i2prouter.az.1
 installer/resources/man/i2prouter.de.1
 installer/resources/man/i2prouter.es.1
@@ -10,6 +11,7 @@ installer/resources/man/i2prouter.nl.1
 installer/resources/man/i2prouter.pl.1
 installer/resources/man/i2prouter.pt.1
 installer/resources/man/i2prouter.pt_BR.1
+installer/resources/man/i2prouter.ro.1
 installer/resources/man/i2prouter.ru.1
 installer/resources/man/i2prouter.sv.1
 installer/resources/man/i2prouter.tr.1

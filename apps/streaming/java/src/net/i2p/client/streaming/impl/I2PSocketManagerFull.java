@@ -28,6 +28,7 @@ import net.i2p.client.streaming.I2PServerSocket;
 import net.i2p.client.streaming.I2PSocket;
 import net.i2p.client.streaming.I2PSocketManager;
 import net.i2p.client.streaming.I2PSocketOptions;
+import net.i2p.client.streaming.IncomingConnectionFilter;
 import net.i2p.crypto.SigAlgo;
 import net.i2p.crypto.SigType;
 import net.i2p.data.Certificate;
@@ -191,7 +192,8 @@ public class I2PSocketManagerFull implements I2PSocketManager {
      * @param opts may be null
      * @param name non-null
      */
-    public I2PSocketManagerFull(I2PAppContext context, I2PSession session, Properties opts, String name) {
+    public I2PSocketManagerFull(I2PAppContext context, I2PSession session, Properties opts, String name,
+                IncomingConnectionFilter connectionFilter) {
         _context = context;
         _session = session;
         _subsessions = new ConcurrentHashSet<I2PSession>(4);
@@ -200,7 +202,7 @@ public class I2PSocketManagerFull implements I2PSocketManager {
         _name = name + " " + (__managerId.incrementAndGet());
         _acceptTimeout = ACCEPT_TIMEOUT_DEFAULT;
         _defaultOptions = new ConnectionOptions(opts);
-        _connectionManager = new ConnectionManager(_context, _session, _defaultOptions);
+        _connectionManager = new ConnectionManager(_context, _session, _defaultOptions, connectionFilter);
         _serverSocket = new I2PServerSocketFull(this);
         
         if (_log.shouldLog(Log.INFO)) {
@@ -350,7 +352,7 @@ public class I2PSocketManagerFull implements I2PSocketManager {
      * 
      * @return connected I2PSocket, or null through 0.9.16, non-null as of 0.9.17
      * @throws I2PException if session is closed
-     * @throws RouterRestartException (extends I2PException) if the router is apparently restarting, since 0.9.34
+     * @throws net.i2p.client.streaming.RouterRestartException (extends I2PException) if the router is apparently restarting, since 0.9.34
      * @throws ConnectException (since 0.9.17; I2PServerSocket interface always declared it)
      * @throws SocketTimeoutException if a timeout was previously set with setSoTimeout and the timeout has been reached.
      */

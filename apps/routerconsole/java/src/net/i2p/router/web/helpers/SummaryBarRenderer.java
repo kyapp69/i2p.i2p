@@ -3,19 +3,21 @@ package net.i2p.router.web.helpers;
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
-import java.text.DateFormat;
+import java.text.Collator;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
+import java.util.TreeMap;
 import java.util.List;
 import java.util.Map;
 
+import net.i2p.CoreVersion;
 import net.i2p.app.ClientAppManager;
 import net.i2p.crypto.SigType;
 import net.i2p.data.DataHelper;
 import net.i2p.router.RouterContext;
 import net.i2p.router.news.NewsEntry;
 import net.i2p.router.news.NewsManager;
+import net.i2p.router.web.ConfigUpdateHandler;
 import net.i2p.router.web.CSSHelper;
 import net.i2p.router.web.Messages;
 import net.i2p.router.web.NavHelper;
@@ -78,17 +80,13 @@ class SummaryBarRenderer {
         String requestURI = _helper.getRequestURI();
         String page = requestURI.replace("/", "").replace(".jsp", "");
         List<String> sections = _helper.getSummaryBarSections(page);
-        StringBuilder buf = new StringBuilder(8*1024);
+
+        // regardless of section order, we want to process the restart buttons first,
+        // so other sections reflect the current restart state
+        String restartStatus = sections.contains("RestartStatus") ? renderRestartStatusHTML() : null;
+
+        StringBuilder buf = new StringBuilder(1024);
         for (String section : sections) {
-            // Commented out because broken. Replaced by if-elseif blob below.
-            /*try {
-                String section = (String)ALL_SECTIONS.get(sections[i]).invoke(this);
-                if (section != null && section != "") {
-                    out.write("<hr>" + i + "<hr>\n" + section);
-                }
-            } catch (Exception e) {
-                out.write("<hr>" +i + " - Exception<hr>\n" + e);
-            }*/
             buf.setLength(0);
 
             buf.append("<hr>\n");
@@ -113,7 +111,7 @@ class SummaryBarRenderer {
             else if ("UpdateStatus".equals(section))
                 buf.append(renderUpdateStatusHTML());
             else if ("RestartStatus".equals(section))
-                buf.append(renderRestartStatusHTML());
+                buf.append(restartStatus); // prerendered above
             else if ("Peers".equals(section))
                 buf.append(renderPeersHTML());
             else if ("PeersAdvanced".equals(section))
@@ -148,113 +146,185 @@ class SummaryBarRenderer {
            .append("\">")
            .append(_t("Help &amp; FAQ"))
            .append("</a></h3><hr class=\"b\">\n" +
+                   "<table id=\"sb_help\"><tr><td>");
 
-                   "<table id=\"sb_help\"><tr><td>" +
+        // Store all items in map so they are sorted by translated name, then output
+        Map<String, String> svcs = new TreeMap<String, String>(Collator.getInstance());
+        StringBuilder rbuf = new StringBuilder(128);
 
-                   "<a href=\"/help#advancedsettings\" target=\"_top\" title=\"")
-           .append(_t("A guide to some of the less-used configuration settings"))
-           .append("\">")
-           .append(nbsp(_t("Advanced Settings")))
-           .append("</a>\n" +
-
-                   "<a href=\"/help#changelog\" target=\"_top\" title=\"")
+        String tx = _t("Changelog");
+        rbuf.append("<a href=\"/viewhistory\" target=\"_top\" title=\"")
            .append(_t("Recent development changes to the router"))
            .append("\">")
-           .append(nbsp(_t("Changelog")))
-           .append("</a>\n" +
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-                   "<a href=\"/help#configurationhelp\" target=\"_top\" title=\"")
-           .append(_t("An introduction to configuring your router"))
-           .append("\">")
-           .append(nbsp(_t("Configuration")))
-           .append("</a>\n" +
-
-                   "<a href=\"/help#faq\" target=\"_top\" title=\"")
+        tx = _t("FAQ");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/help#faq\" target=\"_top\" title=\"")
            .append(_t("A shortened version of the official Frequently Asked Questions"))
            .append("\">")
-           .append(nbsp(_t("FAQ")))
-           .append("</a>\n" +
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-                   "<a href=\"/help#legal\" target=\"_top\" title=\"")
+        tx = _t("Legal");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/viewlicense\" target=\"_top\" title=\"")
            .append(_t("Information regarding software and licenses used by I2P"))
            .append("\">")
-           .append(nbsp(_t("Legal")))
-           .append("</a>\n" +
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-                   "<a href=\"/help#reachability\" target=\"_top\" title=\"")
+        tx = _t("Reachability");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/help#reachability\" target=\"_top\" title=\"")
            .append(_t("A short guide to the sidebar's network reachability notification"))
            .append("\">")
-           .append(nbsp(_t("Reachability")))
-           .append("</a>\n" +
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-                   "<a href=\"/help#sidebarhelp\" target=\"_top\" title=\"")
+        tx = _t("Setup");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/welcome\" target=\"_top\" title=\"")
+           .append(_t("New Install Wizard"))
+           .append("\">")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
+
+        tx = _t("Sidebar");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/help#sidebarhelp\" target=\"_top\" title=\"")
            .append(_t("An introduction to the router sidebar"))
            .append("\">")
-           .append(nbsp(_t("Sidebar")))
-           .append("</a>\n" +
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-                   "<a href=\"/console#trouble\" target=\"_top\" title=\"")
+        tx = _t("Troubleshoot");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/console#trouble\" target=\"_top\" title=\"")
            .append(_t("Troubleshooting &amp; Further Assistance"))
            .append("\">")
-           .append(nbsp(_t("Troubleshoot")))
-           .append("</a>\n")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-           .append("</td></tr></table>\n");
+        for (String row : svcs.values()) {
+             buf.append(row);
+        }
+        buf.append("</td></tr></table>\n");
         return buf.toString();
     }
 
     public String renderI2PServicesHTML() {
-        StringBuilder buf = new StringBuilder(512);
-        buf.append("<h3><a href=\"/configclients\" target=\"_top\" title=\"")
-           .append(_t("Configure startup of clients and webapps (services); manually start dormant services"))
-           .append("\">")
-           .append(_t("I2P Services"))
-           .append("</a></h3>\n" +
-
-                   "<hr class=\"b\"><table id=\"sb_services\"><tr><td>");
-
+        // Store all items in map so they are sorted by translated name, add the plugins, then output
+        Map<String, String> svcs = new TreeMap<String, String>(Collator.getInstance());
+        StringBuilder rbuf = new StringBuilder(128);
         PortMapper pm = _context.portMapper();
         if (pm.isRegistered(PortMapper.SVC_SUSIMAIL)) {
-           buf.append("<a href=\"/webmail\" target=\"_top\" title=\"")
-           .append(_t("Anonymous webmail client"))
-           .append("\">")
-           .append(nbsp(_t("Email")))
-           .append("</a>\n");
+            String tx = _t("Email");
+            rbuf.append("<tr><td><img src=\"/themes/console/light/images/inbox.png\" height=\"16\" width=\"16\" alt=\"\"></td><td align=\"left\">" +
+                        "<a href=\"/webmail\" target=\"_top\" title=\"")
+                .append(_t("Anonymous webmail client"))
+                .append("\">")
+                .append(nbsp(tx))
+                .append("</a></td></tr>\n");
+            svcs.put(tx, rbuf.toString());
+        }
+
+        if (pm.isRegistered(PortMapper.SVC_JSONRPC)) {
+            String tx = _t("I2PControl");
+            rbuf.setLength(0);
+            rbuf.append("<tr><td><img src=\"/themes/console/images/plugin.png\" height=\"16\" width=\"16\" alt=\"\"></td><td align=\"left\">" +
+                        "<a href=\"/jsonrpc/\" target=\"_top\" title=\"")
+                .append(_t("RPC Service"))
+                .append("\">")
+                .append(nbsp(tx))
+                .append("</a></td></tr>\n");
+            svcs.put(tx, rbuf.toString());
         }
 
         if (pm.isRegistered(PortMapper.SVC_I2PSNARK)) {
-           buf.append("<a href=\"/torrents\" target=\"_top\" title=\"")
-           .append(_t("Built-in anonymous BitTorrent Client"))
-           .append("\">")
-           .append(nbsp(_t("Torrents")))
-           .append("</a>\n");
+            String tx = _t("Torrents");
+            rbuf.setLength(0);
+            rbuf.append("<tr><td><img src=\"/themes/console/images/i2psnark.png\" height=\"16\" width=\"16\" alt=\"\"></td><td align=\"left\">" +
+                        "<a href=\"/torrents\" target=\"_top\" title=\"")
+                .append(_t("Built-in anonymous BitTorrent Client"))
+                .append("\">")
+                .append(nbsp(tx))
+                .append("</a></td></tr>\n");
+            svcs.put(tx, rbuf.toString());
         }
 
+        String url = getEepsiteURL(pm);
+        if (url != null) {
+            String tx = _t("Web Server");
+            rbuf.setLength(0);
+            rbuf.append("<tr><td><img src=\"/themes/console/images/server.png\" height=\"16\" width=\"16\" alt=\"\"></td><td align=\"left\">" +
+                        "<a href=\"")
+                .append(url)
+                .append("\" target=\"_blank\" title=\"")
+                .append(_t("Local web server"))
+               . append("\">")
+                .append(nbsp(tx))
+                .append("</a></td></tr>\n");
+            svcs.put(tx, rbuf.toString());
+        }
+
+        Map<String, String> apps = NavHelper.getClientAppLinks();
+        if (apps != null)
+            svcs.putAll(apps);
+        if (!svcs.isEmpty()) {
+            StringBuilder buf = new StringBuilder(128 * svcs.size());
+            buf.append("<h3><a href=\"/configclients\" target=\"_top\" title=\"")
+               .append(_t("Configure startup of clients and webapps (services); manually start dormant services"))
+               .append("\">")
+               .append(_t("I2P Services"))
+               .append("</a></h3>\n" +
+                       "<hr class=\"b\"><table id=\"sb_services\">");
+            for (String row : svcs.values()) {
+                 buf.append(row);
+            }
+            buf.append("</table>\n");
+            return buf.toString();
+        } else {
+            return "";
+        }
+    }
+
+    /**
+     *  @return null if none
+     *  @since 0.9.43 split out from above, used by HomeHelper, fixed for IPv6
+     */
+    static String getEepsiteURL(PortMapper pm) {
         int port = pm.getPort(PortMapper.SVC_EEPSITE);
         int sslPort = pm.getPort(PortMapper.SVC_HTTPS_EEPSITE);
-        if (sslPort > 0 || port > 0) {
-           String svc;
-           if (sslPort > 0) {
-               buf.append("<a href=\"https://");
-               svc = PortMapper.SVC_HTTPS_EEPSITE;
-               port = sslPort;
-           } else {
-               buf.append("<a href=\"http://");
-               svc = PortMapper.SVC_EEPSITE;
-           }
-           buf.append(pm.getActualHost(svc, "127.0.0.1"))
-           .append(':')
-           .append(port)
-           .append("/\" target=\"_blank\" title=\"")
-           .append(_t("Local web server"))
-           .append("\">")
-           .append(nbsp(_t("Web Server")))
-           .append("</a>\n");
+        if (port <= 0 && sslPort <= 0)
+            return null;
+        String svc;
+        StringBuilder buf = new StringBuilder(32);
+        if (sslPort > 0) {
+            buf.append("https://");
+            svc = PortMapper.SVC_HTTPS_EEPSITE;
+            port = sslPort;
+        } else {
+            buf.append("http://");
+            svc = PortMapper.SVC_EEPSITE;
         }
-
-        buf.append(NavHelper.getClientAppLinks(_context))
-
-           .append("</td></tr></table>\n");
+        String host = pm.getActualHost(svc, "127.0.0.1");
+        if (host.contains(":"))
+            buf.append('[');
+        buf.append(host);
+        if (host.contains(":"))
+            buf.append(']');
+        buf.append(':')
+           .append(port)
+           .append('/');
         return buf.toString();
     }
 
@@ -268,67 +338,99 @@ class SummaryBarRenderer {
 
                    "<table id=\"sb_internals\"><tr><td>\n");
 
+        // Store all items in map so they are sorted by translated name, then output
+        Map<String, String> svcs = new TreeMap<String, String>(Collator.getInstance());
+        StringBuilder rbuf = new StringBuilder(128);
         PortMapper pm = _context.portMapper();
         if (pm.isRegistered(PortMapper.SVC_SUSIDNS)) {
-           buf.append("<a href=\"/dns\" target=\"_top\" title=\"")
-           .append(_t("Manage your I2P hosts file here (I2P domain name resolution)"))
-           .append("\">")
-           .append(nbsp(_t("Addressbook")))
-           .append("</a>\n");
+            String tx = _t("Addressbook");
+            rbuf.append("<a href=\"/dns\" target=\"_top\" title=\"")
+                .append(_t("Manage your I2P hosts file here (I2P domain name resolution)"))
+                .append("\">")
+                .append(nbsp(tx))
+                .append("</a>\n");
+            svcs.put(tx, rbuf.toString());
         }
 
-        if (!StatSummarizer.isDisabled()) {
-            buf.append("<a href=\"/graphs\" target=\"_top\" title=\"")
-               .append(_t("Graph router performance"))
-               .append("\">")
-               .append(nbsp(_t("Graphs")))
-               .append("</a>\n");
+        if (!StatSummarizer.isDisabled(_context)) {
+            String tx = _t("Graphs");
+            rbuf.setLength(0);
+            rbuf.append("<a href=\"/graphs\" target=\"_top\" title=\"")
+                .append(_t("Graph router performance"))
+                .append("\">")
+                .append(nbsp(tx))
+                .append("</a>\n");
+            svcs.put(tx, rbuf.toString());
         }
 
-        buf.append("<a href=\"/help\" target=\"_top\" title=\"")
+        String tx = _t("Help");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/help\" target=\"_top\" title=\"")
            .append(_t("Router Help and FAQ"))
            .append("\">")
-           .append(nbsp(_t("Help")))
+           .append(nbsp(tx))
            .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
         if (pm.isRegistered(PortMapper.SVC_I2PTUNNEL)) {
-           buf.append("<a href=\"/i2ptunnelmgr\" target=\"_top\" title=\"")
-           .append(_t("Local Tunnels"))
-           .append("\">")
-           .append(nbsp(_t("Hidden Services Manager")))
-           .append("</a>\n");
+            tx = _t("Hidden Services Manager");
+            rbuf.setLength(0);
+            rbuf.append("<a href=\"/i2ptunnelmgr\" target=\"_top\" title=\"")
+                .append(_t("Local Tunnels"))
+                .append("\">")
+                .append(nbsp(tx))
+                .append("</a>\n");
+            svcs.put(tx, rbuf.toString());
         }
 
-        buf.append("<a href=\"/logs\" target=\"_top\" title=\"")
-           .append(_t("Health Report"))
-           .append("\">")
-           .append(nbsp(_t("Logs")))
-           .append("</a>\n" +
+        tx = _t("Logs");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/logs\" target=\"_top\" title=\"")
+            .append(_t("Health Report"))
+            .append("\">")
+            .append(nbsp(tx))
+            .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-                   "<a href=\"/netdb\" target=\"_top\" title=\"")
-           .append(_t("Show list of all known I2P routers"))
-           .append("\">")
-           .append(nbsp(_t("NetDB")))
-           .append("</a>\n" +
+        tx = _t("NetDB");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/netdb\" target=\"_top\" title=\"")
+            .append(_t("Show list of all known I2P routers"))
+            .append("\">")
+            .append(nbsp(tx))
+            .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-                   "<a href=\"/peers\" target=\"_top\" title=\"")
-           .append(_t("Show all current peer connections"))
-           .append("\">")
-           .append(nbsp(_t("Peers")))
-           .append("</a>\n" +
+        tx = _t("Peers");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/peers\" target=\"_top\" title=\"")
+            .append(_t("Show all current peer connections"))
+            .append("\">")
+            .append(nbsp(tx))
+            .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-                   "<a href=\"/profiles\" target=\"_top\" title=\"")
-           .append(_t("Show recent peer performance profiles"))
-           .append("\">")
-           .append(nbsp(_t("Profiles")))
-           .append("</a>\n" +
+        tx = _t("Profiles");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/profiles\" target=\"_top\" title=\"")
+            .append(_t("Show recent peer performance profiles"))
+            .append("\">")
+            .append(nbsp(tx))
+            .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-                   "<a href=\"/tunnels\" target=\"_top\" title=\"")
-           .append(_t("View existing tunnels and tunnel build status"))
-           .append("\">")
-           .append(nbsp(_t("Tunnels")))
-           .append("</a>\n");
+        tx = _t("Tunnels");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/tunnels\" target=\"_top\" title=\"")
+            .append(_t("View existing tunnels and tunnel build status"))
+            .append("\">")
+            .append(nbsp(tx))
+            .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
+        for (String row : svcs.values()) {
+             buf.append(row);
+        }
         buf.append("</td></tr></table>\n");
         return buf.toString();
     }
@@ -341,83 +443,125 @@ class SummaryBarRenderer {
            .append("\" href=\"/configadvanced\" target=\"_top\">")
            .append(_t("Advanced"))
            .append("</a></h3>\n")
+           .append("<hr class=\"b\"><table id=\"sb_advanced\"><tr><td>");
 
-           .append("<hr class=\"b\"><table id=\"sb_advanced\"><tr><td>")
+        // Store all items in map so they are sorted by translated name, then output
+        Map<String, String> svcs = new TreeMap<String, String>(Collator.getInstance());
+        StringBuilder rbuf = new StringBuilder(128);
 
-           .append("<a target=\"_top\" title=\"")
+        String tx = _t("Certs");
+        rbuf.append("<a target=\"_top\" title=\"")
            .append(_t("Review active encryption certificates used in console"))
            .append("\" href=\"/certs\">")
-           .append(nbsp(_t("Certs")))
-           .append("</a>\n")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-           .append("<a title=\"")
+        tx = _t("Changelog");
+        rbuf.setLength(0);
+        rbuf.append("<a title=\"")
            .append(_t("View full changelog"))
            .append("\" href=\"/viewhistory\" target=\"_blank\">")
-           .append(nbsp(_t("Changelog")))
-           .append("</a>\n")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-           .append("<a title=\"")
+        tx = _t("Debug");
+        rbuf.setLength(0);
+        rbuf.append("<a title=\"")
            .append(_t("View router debug information"))
            .append("\" href=\"/debug\" target=\"_top\">")
-           .append(nbsp(_t("Debug")))
-           .append("</a>\n")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
            // 7 days
-           .append("<a href=\"/events?from=604800000\" target=\"_top\" title=\"")
+        tx = _t("Events");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/events?from=604800000\" target=\"_top\" title=\"")
            .append(_t("View historical log of router events"))
            .append("\">")
-           .append(nbsp(_t("Events")))
-           .append("</a>\n")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-           .append("<a title=\"")
+        tx = _t("Jars");
+        rbuf.setLength(0);
+        rbuf.append("<a title=\"")
            .append(_t("Review extended info about installed .jar and .war files"))
            .append("\" href=\"/jars\" target=\"_top\">")
-           .append(nbsp(_t("Jars")))
+           .append(nbsp(tx))
            .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
         File javadoc = new File(_context.getBaseDir(), "docs/javadoc/index.html");
-        if (javadoc.exists())
-            buf.append("<a title=\"")
+        if (javadoc.exists()) {
+            tx = "Javadoc";
+            rbuf.setLength(0);
+            rbuf.append("<a title=\"")
                .append(_t("Documentation for the I2P API"))
                .append("\" href=\"/javadoc/index.html\" target=\"_blank\">Javadoc</a>\n");
+            svcs.put(tx, rbuf.toString());
+        }
 
-        buf.append("<a href=\"/jobs\" target=\"_top\" title=\"")
+        tx = _t("Jobs");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/jobs\" target=\"_top\" title=\"")
            .append(_t("Show the router's workload, and how it's performing"))
            .append("\">")
-           .append(nbsp(_t("Jobs")))
-           .append("</a>\n")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-           .append("<a title=\"")
+        tx = _t("LeaseSets");
+        rbuf.setLength(0);
+        rbuf.append("<a title=\"")
            .append(_t("View active leasesets (debug mode)"))
            .append("\" href=\"/netdb?l=2\" target=\"_top\">")
-           .append(nbsp(_t("LeaseSets")))
-           .append("</a>\n")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-           .append("<a title=\"")
+        tx = _t("NetDB Search");
+        rbuf.setLength(0);
+        rbuf.append("<a title=\"")
            .append(_t("Network database search tool"))
            .append("\" href=\"/netdb?f=4\" target=\"_top\">")
-           .append(nbsp(_t("NetDB Search")))
-           .append("</a>\n")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-           .append("<a title=\"")
+        tx = _t("Proof");
+        rbuf.setLength(0);
+        rbuf.append("<a title=\"")
            .append(_t("Signed proof of ownership of this router"))
            .append("\" href=\"/proof\" target=\"_top\">")
-           .append(nbsp(_t("Proof")))
-           .append("</a>\n")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-           .append("<a href=\"/stats\" target=\"_top\" title=\"")
+        tx = _t("Stats");
+        rbuf.setLength(0);
+        rbuf.append("<a href=\"/stats\" target=\"_top\" title=\"")
            .append(_t("Textual router performance statistics"))
            .append("\">")
-           .append(nbsp(_t("Stats")))
-           .append("</a>\n")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-           .append("<a title=\"")
+        tx = _t("Sybils");
+        rbuf.setLength(0);
+        rbuf.append("<a title=\"")
            .append(_t("Review possible sybils in network database"))
            .append("\" href=\"/netdb?f=3\" target=\"_top\">")
-           .append(nbsp(_t("Sybils")))
-           .append("</a>\n")
+           .append(nbsp(tx))
+           .append("</a>\n");
+        svcs.put(tx, rbuf.toString());
 
-           .append("</td></tr></table>");
+        for (String row : svcs.values()) {
+             buf.append(row);
+        }
+        buf.append("</td></tr></table>");
         return buf.toString();
     }
 
@@ -614,9 +758,7 @@ class SummaryBarRenderer {
 
     public String renderRestartStatusHTML() {
         if (_helper == null) return "";
-        StringBuilder buf = new StringBuilder(512);
-        buf.append(_helper.getRestartStatus());
-        return buf.toString();
+        return _helper.getRestartStatus();
     }
 
     public String renderPeersHTML() {
@@ -769,9 +911,7 @@ class SummaryBarRenderer {
 
     public String renderFirewallAndReseedStatusHTML() {
         if (_helper == null) return "";
-        StringBuilder buf = new StringBuilder(512);
-        buf.append(_helper.getFirewallAndReseedStatus());
-        return buf.toString();
+        return _helper.getFirewallAndReseedStatus();
     }
 
     public String renderBandwidthHTML() {
@@ -821,15 +961,28 @@ class SummaryBarRenderer {
     /** @since 0.9.32 */
     public String renderBandwidthGraphHTML() {
         if (_helper == null) return "";
+        if (StatSummarizer.isDisabled(_context))
+            return "";
         StringBuilder buf = new StringBuilder(512);
-        if (!StatSummarizer.isDisabled())
-            buf.append("<div id=\"sb_graphcontainer\"><a href=\"/graphs\"><table id=\"sb_bandwidthgraph\">" +
+        buf.append("<div id=\"sb_graphcontainer\"");
+        // 15 sec js refresh
+        // only do this if the summary bar refresh is slower, otherwise it looks terrible
+        String r = _context.getProperty(CSSHelper.PROP_REFRESH, CSSHelper.DEFAULT_REFRESH);
+        int refr = 60;
+        try {
+            refr = Integer.parseInt(r);
+        } catch (NumberFormatException nfe) {}
+        if (refr >= 25) {
+            buf.append("><script src=\"/js/refreshGraph.js?").append(CoreVersion.VERSION).append("\" type=\"text/javascript\" id=\"refreshGraph\" async></script>");
+        } else {
+            buf.append(" style=\"background-image: url(/viewstat.jsp?stat=bw.combined&amp;periodCount=20&amp;width=220&amp;height=50&amp;hideLegend=true&amp;hideGrid=true&amp;time=").append(_context.clock().now() / 1000).append("\">");
+        }
+        buf.append("<a href=\"/graphs\"><table id=\"sb_bandwidthgraph\">" +
                        "<tr title=\"")
                .append(_t("Our inbound &amp; outbound traffic for the last 20 minutes"))
                .append("\"><td><span id=\"sb_graphstats\">")
                .append(_helper.getSecondKBps())
                .append("Bps</span></td></tr></table></a></div>\n");
-        buf.append("<script src=\"/js/refreshGraph.js\" type=\"text/javascript\" id=\"refreshGraph\" async></script>");
         return buf.toString();
     }
 
@@ -939,16 +1092,14 @@ class SummaryBarRenderer {
         if (_helper == null) return "";
         StringBuilder buf = new StringBuilder(50);
         buf.append("<h4><span class=\"tunnelBuildStatus\">")
-           .append(_t(_helper.getTunnelStatus()))
+           .append(_helper.getTunnelStatus())
            .append("</span></h4>\n");
         return buf.toString();
     }
 
     public String renderDestinationsHTML() {
         if (_helper == null) return "";
-        StringBuilder buf = new StringBuilder(512);
-        buf.append(_helper.getDestinations());
-        return buf.toString();
+        return _helper.getDestinations();
     }
 
     /** @since 0.9.1 */
@@ -959,11 +1110,6 @@ class SummaryBarRenderer {
         StringBuilder buf = new StringBuilder(512);
         String consoleNonce = CSSHelper.getNonce();
         if (consoleNonce != null) {
-            // Set up title and pre-headings stuff.
-            //buf.append("<h3><a href=\"/configupdate\">")
-            buf.append("<h3><a href=\"/news\">")
-               .append(_t("News &amp; Updates"))
-               .append("</a></h3><hr class=\"b\"><div class=\"sb_newsheadings\">\n");
             // Get news content.
             List<NewsEntry> entries = Collections.emptyList();
             ClientAppManager cmgr = _context.clientAppManager();
@@ -973,25 +1119,36 @@ class SummaryBarRenderer {
                     entries = nmgr.getEntries();
             }
             if (!entries.isEmpty()) {
-                buf.append("<table>\n");
-                DateFormat fmt = DateFormat.getDateInstance(DateFormat.SHORT);
-                // the router sets the JVM time zone to UTC but saves the original here so we can get it
-                fmt.setTimeZone(SystemVersion.getSystemTimeZone(_context));
                 int i = 0;
                 // show a min of 1, max of 3, none older than 60 days over min
-                final int min = 1;
+                // Except, if news fetching is disabled, min is 0 and oldest is 7 days.
+                // We still show news even if disabled, because the user could click it manually
+                String freq = _context.getProperty(ConfigUpdateHandler.PROP_REFRESH_FREQUENCY,
+                                                   ConfigUpdateHandler.DEFAULT_REFRESH_FREQUENCY);
+                long ms = ConfigUpdateHandler.DEFAULT_REFRESH_FREQ;
+                try { 
+                    ms = Long.parseLong(freq);
+                } catch (NumberFormatException nfe) {}
+                final int min = (ms > 0) ? 1 : 0;
                 final int max = 3;
+                final long age = (ms > 0) ? 60*24*60*60*1000L : 7*24*60*60*1000L;
+                final long oldest = _context.clock().now() - age;
                 for (NewsEntry entry : entries) {
                     if (i >= min && entry.updated > 0 &&
-                        entry.updated < _context.clock().now() - 60*24*60*60*1000L)
+                        entry.updated < oldest)
                         break;
+                    if (i == 0) {
+                        // Set up title and pre-headings stuff.
+                        buf.append("<h3><a href=\"/news\">")
+                           .append(_t("News &amp; Updates"))
+                           .append("</a></h3><hr class=\"b\"><div class=\"sb_newsheadings\">\n<table>\n");
+                    }
                     buf.append("<tr><td><a href=\"/?news=1&amp;consoleNonce=")
                        .append(consoleNonce)
                        .append("\"");
                     if (entry.updated > 0) {
-                        Date date = new Date(entry.updated);
                         buf.append(" title=\"")
-                           .append(_t("Published")).append(": ").append(fmt.format(date)).append("\"");
+                           .append(_t("Published")).append(": ").append(DataHelper.formatDate(entry.updated)).append("\"");
                     }
                     buf.append(">");
                     buf.append(entry.title)
@@ -999,17 +1156,9 @@ class SummaryBarRenderer {
                     if (++i >= max)
                         break;
                 }
-                buf.append("</table>\n");
-            } else {
-                buf.append("<center><i>")
-                   .append(_t("none"))
-                   .append("</i></center>");
+                if (i > 0)
+                    buf.append("</table>\n</div>\n");
             }
-            // Add post-headings stuff.
-            //buf.append("<a href=\"/news\">")
-                //.append(_t("Show all news"))
-                //.append("</a>\n");
-            buf.append("</div>\n");
         }
         return buf.toString();
     }

@@ -1,3 +1,57 @@
+i2p (0.9.44-1ubuntu1) bionic; urgency=medium
+
+  * New upstream version 0.9.44
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Sun, 01 Dec 2019 12:12:12 +0000
+
+i2p (0.9.43-1ubuntu1) bionic; urgency=medium
+
+  * New upstream version 0.9.43
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Tue, 22 Oct 2019 12:12:12 +0000
+
+i2p (0.9.42-1ubuntu1) bionic; urgency=medium
+
+  * New upstream version 0.9.42
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 28 Aug 2019 12:12:12 +0000
+
+i2p (0.9.41-1ubuntu1) bionic; urgency=medium
+
+  * New upstream version 0.9.41
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 3 Jul 2019 12:12:12 +0000
+
+i2p (0.9.40-1ubuntu1) bionic; urgency=medium
+
+  * New upstream version 0.9.40
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 8 May 2019 12:12:12 +0000
+
+i2p (0.9.39-2ubuntu1) bionic; urgency=medium
+
+  * Fix compatibility with Jetty 9.4
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Fri, 19 Apr 2019 12:12:12 +0000
+
+i2p (0.9.39-1ubuntu1) bionic; urgency=medium
+
+  * New upstream version 0.9.39
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Fri, 22 Mar 2019 12:12:12 +0000
+
+i2p (0.9.38-1ubuntu1) bionic; urgency=medium
+
+  * New upstream version 0.9.38
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 23 Jan 2019 12:12:12 +0000
+
+i2p (0.9.37-1ubuntu1) bionic; urgency=medium
+
+  * New upstream version 0.9.37
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Fri, 05 Oct 2018 12:12:12 +0000
+
 i2p (0.9.36-2ubuntu1) bionic; urgency=medium
 
   * New upstream version 0.9.36

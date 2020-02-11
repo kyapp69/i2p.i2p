@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.Queue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import net.i2p.crypto.HMACGenerator;
 import net.i2p.data.Base64;
 import net.i2p.data.DataHelper;
 import net.i2p.data.SessionKey;
@@ -225,7 +226,7 @@ class UDPPacket implements CDQEntry {
      * MAC matches, false otherwise.
      *
      */
-    public synchronized boolean validate(SessionKey macKey) {
+    public synchronized boolean validate(SessionKey macKey, HMACGenerator hmac) {
         verifyNotReleased(); 
         //_beforeValidate = _context.clock().now();
         boolean eq = false;
@@ -241,17 +242,24 @@ class UDPPacket implements CDQEntry {
             off += payloadLength;
             System.arraycopy(_data, _packet.getOffset() + MAC_SIZE, _validateBuf, off, IV_SIZE);
             off += IV_SIZE;
-            DataHelper.toLong(_validateBuf, off, 2, payloadLength /* ^ PacketBuilder.PROTOCOL_VERSION */ );
+            // version is zero, unlikely to ever change
+            int plval = payloadLength /* ^ PacketBuilder.PROTOCOL_VERSION */ ;
+            // network ID cross-check, proposal 147
+            int netid = _context.router().getNetworkID();
+            if (netid != 2) {
+                plval ^= (netid - 2) << 8;
+            }
+            DataHelper.toLong(_validateBuf, off, 2, plval);
             off += 2;
 
-            eq = _context.hmac().verify(macKey, _validateBuf, 0, off, _data, _packet.getOffset(), MAC_SIZE);
+            eq = hmac.verify(macKey, _validateBuf, 0, off, _data, _packet.getOffset(), MAC_SIZE);
 
             if (!eq) {
                 // this is relatively frequent, as you can get old keys in PacketHandler.
                 Log log = _context.logManager().getLog(UDPPacket.class);
                 if (log.shouldLog(Log.INFO)) {
                     byte[] calc = new byte[32];
-                    _context.hmac().calculate(macKey, _validateBuf, 0, off, calc, 0);
+                    hmac.calculate(macKey, _validateBuf, 0, off, calc, 0);
                     StringBuilder str = new StringBuilder(512);
                     str.append("Bad HMAC:\n\t");
                     str.append(_packet.getLength()).append(" byte pkt, ");

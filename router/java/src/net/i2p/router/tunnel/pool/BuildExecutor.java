@@ -338,8 +338,9 @@ class BuildExecutor implements Runnable {
                     if (!pool.isAlive())
                         continue;
                     int howMany = pool.countHowManyToBuild();
-                    for (int j = 0; j < howMany; j++)
+                    for (int j = 0; j < howMany; j++) {
                         wanted.add(pool);
+                    }
                 }
 
                 // allowed() also expires timed out requests (for new style requests)
@@ -415,7 +416,7 @@ class BuildExecutor implements Runnable {
                                 _context.statManager().addRateData("tunnel.buildConfigTime", pTime, 0);
                                 if (_log.shouldLog(Log.DEBUG))
                                     _log.debug("Configuring new tunnel " + i + " for " + pool + ": " + cfg);
-                                buildTunnel(pool, cfg);
+                                buildTunnel(cfg);
                                 //realBuilt++;
                             } else {
                                 i--;
@@ -500,19 +501,18 @@ class BuildExecutor implements Runnable {
      * @return number of tunnels allowed after processing these zero hop tunnels (almost always the same as before)
      */
     private int buildZeroHopTunnels(List<TunnelPool> wanted, int allowed) {
-        for (int i = 0; i < wanted.size(); i++) {
-            TunnelPool pool = wanted.get(0);
+        for (Iterator<TunnelPool> iter = wanted.iterator(); iter.hasNext(); ) {
+            TunnelPool pool = iter.next();
             if (pool.getSettings().getLength() == 0) {
                 PooledTunnelCreatorConfig cfg = pool.configureNewTunnel();
                 if (cfg != null) {
                     if (_log.shouldLog(Log.DEBUG))
-                        _log.debug("Configuring short tunnel " + i + " for " + pool + ": " + cfg);
-                    buildTunnel(pool, cfg);
+                        _log.debug("Configuring short tunnel for " + pool + ": " + cfg);
+                    buildTunnel(cfg);
                     if (cfg.getLength() > 1) {
                         allowed--; // oops... shouldn't have done that, but hey, its not that bad...
                     }
-                    wanted.remove(i);
-                    i--;
+                    iter.remove();
                 } else {
                     if (_log.shouldLog(Log.DEBUG))
                         _log.debug("Configured a null tunnel");
@@ -524,7 +524,7 @@ class BuildExecutor implements Runnable {
     
     public boolean isRunning() { return _isRunning; }
     
-    void buildTunnel(TunnelPool pool, PooledTunnelCreatorConfig cfg) {
+    void buildTunnel(PooledTunnelCreatorConfig cfg) {
         long beforeBuild = System.currentTimeMillis();
         if (cfg.getLength() > 1) {
             do {
@@ -532,7 +532,7 @@ class BuildExecutor implements Runnable {
                 cfg.setReplyMessageId(_context.random().nextLong(I2NPMessage.MAX_ID_VALUE));
             } while (addToBuilding(cfg)); // if a dup, go araound again
         }
-        boolean ok = BuildRequestor.request(_context, pool, cfg, this);
+        boolean ok = BuildRequestor.request(_context, cfg, this);
         if (!ok)
             return;
         if (cfg.getLength() > 1) {
@@ -556,10 +556,10 @@ class BuildExecutor implements Runnable {
      *  This wakes up the executor, so call this after TunnelPool.addTunnel()
      *  so we don't build too many.
      */
-    public void buildComplete(PooledTunnelCreatorConfig cfg, TunnelPool pool) {
+    public void buildComplete(PooledTunnelCreatorConfig cfg) {
         if (_log.shouldLog(Log.DEBUG))
             _log.debug("Build complete for " + cfg, new Exception());
-        pool.buildComplete(cfg);
+        cfg.getTunnelPool().buildComplete(cfg);
         if (cfg.getLength() > 1)
             removeFromBuilding(cfg.getReplyMessageId());
         // Only wake up the build thread if it took a reasonable amount of time -
@@ -571,7 +571,7 @@ class BuildExecutor implements Runnable {
                 _currentlyBuilding.notifyAll();
             }
         } else {
-            if (_log.shouldLog(Log.INFO))
+            if (cfg.getLength() > 1 && _log.shouldLog(Log.INFO))
                 _log.info("Build complete really fast (" + buildTime + " ms) for tunnel: " + cfg);
         }
         

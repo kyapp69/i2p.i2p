@@ -5,6 +5,7 @@ import java.net.InetAddress;
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.Buffer;
 import java.nio.channels.CancelledKeyException;
 import java.nio.channels.ClosedChannelException;
 import java.nio.channels.ClosedSelectorException;
@@ -262,11 +263,12 @@ class EventPumper implements Runnable {
                                  */
                                 if ((!key.isValid()) &&
                                     (!((SocketChannel)key.channel()).isConnectionPending()) &&
-                                    con.getTimeSinceCreated() > 2 * NTCPTransport.ESTABLISH_TIMEOUT) {
+                                    con.getTimeSinceCreated(now) > 2 * NTCPTransport.ESTABLISH_TIMEOUT) {
                                     if (_log.shouldLog(Log.INFO))
                                         _log.info("Removing invalid key for " + con);
                                     // this will cancel the key, and it will then be removed from the keyset
                                     con.close();
+                                    key.cancel();
                                     failsafeInvalid++;
                                     continue;
                                 }
@@ -293,10 +295,11 @@ class EventPumper implements Runnable {
                                     expire = _expireIdleWriteTime;
                                 }
 
-                                if ( con.getTimeSinceSend() > expire &&
-                                     con.getTimeSinceReceive() > expire) {
+                                if ( con.getTimeSinceSend(now) > expire &&
+                                     con.getTimeSinceReceive(now) > expire) {
                                     // we haven't sent or received anything in a really long time, so lets just close 'er up
                                     con.sendTerminationAndClose();
+                                    key.cancel();
                                     if (_log.shouldInfo())
                                         _log.info("Failsafe or expire close for " + con);
                                     failsafeCloses++;
@@ -535,9 +538,9 @@ class EventPumper implements Runnable {
     }
     
     private void processConnect(SelectionKey key) {
-        NTCPConnection con = (NTCPConnection)key.attachment();
+        final NTCPConnection con = (NTCPConnection)key.attachment();
+        final SocketChannel chan = con.getChannel();
         try {
-            SocketChannel chan = con.getChannel();
             boolean connected = chan.finishConnect();
             if (_log.shouldLog(Log.DEBUG))
                 _log.debug("processing connect for " + con + ": connected? " + connected);
@@ -586,7 +589,8 @@ class EventPumper implements Runnable {
      *  High-frequency path in thread.
      */
     private void processRead(SelectionKey key) {
-        NTCPConnection con = (NTCPConnection)key.attachment();
+        final NTCPConnection con = (NTCPConnection)key.attachment();
+        final SocketChannel chan = con.getChannel();
         ByteBuffer buf = null;
         try {
             while (true) {
@@ -594,7 +598,7 @@ class EventPumper implements Runnable {
                 int read = 0;
                 int readThisTime;
                 int readCount = 0;
-                while ((readThisTime = con.getChannel().read(buf)) > 0)  {
+                while ((readThisTime = chan.read(buf)) > 0)  {
                     read += readThisTime;
                     readCount++;
                 }
@@ -604,7 +608,7 @@ class EventPumper implements Runnable {
                     _log.debug("Read " + read + " bytes total in " + readCount + " times from " + con);
                 if (read < 0) {
                     if (con.isInbound() && con.getMessagesReceived() <= 0) {
-                        InetAddress addr = con.getChannel().socket().getInetAddress();
+                        InetAddress addr = chan.socket().getInetAddress();
                         int count;
                         if (addr != null) {
                             byte[] ip = addr.getAddress();
@@ -650,7 +654,8 @@ class EventPumper implements Runnable {
                 // go around again if we filled the buffer (so we can read more)
                 boolean keepReading = !buf.hasRemaining();
                 // ZERO COPY. The buffer will be returned in Reader.processRead()
-                buf.flip();
+                // not ByteBuffer to avoid Java 8/9 issues with flip()
+                ((Buffer)buf).flip();
                 FIFOBandwidthLimiter.Request req = _context.bandwidthLimiter().requestInbound(read, "NTCP read"); //con, buf);
                 if (req.getPendingRequested() > 0) {
                     // rare since we generally don't throttle inbound
@@ -683,7 +688,7 @@ class EventPumper implements Runnable {
             if (buf != null)
                 releaseBuf(buf);
             if (con.isInbound() && con.getMessagesReceived() <= 0) {
-                InetAddress addr = con.getChannel().socket().getInetAddress();
+                InetAddress addr = chan.socket().getInetAddress();
                 int count;
                 if (addr != null) {
                     byte[] ip = addr.getAddress();
@@ -729,7 +734,8 @@ class EventPumper implements Runnable {
      *  High-frequency path in thread.
      */
     private void processWrite(SelectionKey key) {
-        NTCPConnection con = (NTCPConnection)key.attachment();
+        final NTCPConnection con = (NTCPConnection)key.attachment();
+        final SocketChannel chan = con.getChannel();
         try {
             while (true) {
                 ByteBuffer buf = con.getNextWriteBuf();
@@ -738,7 +744,7 @@ class EventPumper implements Runnable {
                         con.removeWriteBuf(buf);
                         continue;                    
                     }
-                    int written = con.getChannel().write(buf);
+                    int written = chan.write(buf);
                     //totalWritten += written;
                     if (written == 0) {
                         if ( (buf.remaining() > 0) || (!con.isWriteBufEmpty()) ) {
@@ -751,7 +757,7 @@ class EventPumper implements Runnable {
                     } else if (buf.remaining() > 0) {
                         // stay interested
                         //key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
-                        break;
+                        continue;
                     } else {
                         con.removeWriteBuf(buf);
                         //if (buffer time is too much, add OP_WRITe to the interest ops and break?)
@@ -843,8 +849,9 @@ class EventPumper implements Runnable {
         }
         
         while ((con = _wantsConRegister.poll()) != null) {
+            final SocketChannel schan = con.getChannel();
             try {
-                SelectionKey key = con.getChannel().register(_selector, SelectionKey.OP_CONNECT);
+                SelectionKey key = schan.register(_selector, SelectionKey.OP_CONNECT);
                 key.attach(con);
                 con.setKey(key);
                 RouterAddress naddr = con.getRemoteAddress();
@@ -855,7 +862,7 @@ class EventPumper implements Runnable {
                     if (port <= 0 || ip == null)
                         throw new IOException("Invalid NTCP address: " + naddr);
                     InetSocketAddress saddr = new InetSocketAddress(InetAddress.getByAddress(ip), port);
-                    boolean connected = con.getChannel().connect(saddr);
+                    boolean connected = schan.connect(saddr);
                     if (connected) {
                         // Never happens, we use nonblocking
                         key.interestOps(SelectionKey.OP_READ);

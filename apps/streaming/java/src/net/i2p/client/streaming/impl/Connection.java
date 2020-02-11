@@ -15,6 +15,7 @@ import net.i2p.client.I2PSession;
 import net.i2p.client.streaming.I2PSocketException;
 import net.i2p.data.DataHelper;
 import net.i2p.data.Destination;
+import net.i2p.data.SigningPublicKey;
 import net.i2p.util.Log;
 import net.i2p.util.SimpleTimer;
 import net.i2p.util.SimpleTimer2;
@@ -30,6 +31,7 @@ class Connection {
     private final ConnectionManager _connectionManager;
     private final I2PSession _session;
     private Destination _remotePeer;
+    private SigningPublicKey _transientSPK;
     private final AtomicLong _sendStreamId = new AtomicLong();
     private final AtomicLong _receiveStreamId = new AtomicLong();
     private volatile long _lastSendTime;
@@ -327,8 +329,9 @@ class Connection {
         reply.setFlag(Packet.FLAG_SIGNATURE_INCLUDED);
         reply.setSendStreamId(_sendStreamId.get());
         reply.setReceiveStreamId(_receiveStreamId.get());
-        // TODO remove this someday, as of 0.9.20 we do not require it
-        reply.setOptionalFrom();
+        // As of 0.9.20 we do not require FROM
+        // Removed in 0.9.39
+        //reply.setOptionalFrom();
         reply.setLocalPort(_localPort);
         reply.setRemotePort(_remotePort);
         // this just sends the packet - no retries or whatnot
@@ -872,6 +875,35 @@ class Connection {
         // now that we know who the other end is, get the rtt etc. from the cache
         _connectionManager.updateOptsFromShare(this);
     }
+
+    /**
+     *  The key to verify signatures with.
+     *  The transient SPK if previously received,
+     *  else getRemotePeer().getSigningPublicKey() if previously received,
+     *  else null.
+     *
+     *  @return peer Destination or null if unset
+     *  @since 0.9.39
+     */
+    public synchronized SigningPublicKey getRemoteSPK() {
+        if (_transientSPK != null)
+            return _transientSPK;
+        if (_remotePeer != null)
+            return _remotePeer.getSigningPublicKey();
+        return null;
+    }
+
+    /**
+     *  @param transientSPK null ok
+     *  @since 0.9.39
+     */
+    public void setRemoteTransientSPK(SigningPublicKey transientSPK) { 
+        synchronized(this) {
+            if (_transientSPK != null)
+                throw new RuntimeException("Remote SPK already set");
+            _transientSPK = transientSPK;
+        }
+    }
     
     /**
      *  What stream do we send data to the peer on?
@@ -881,11 +913,11 @@ class Connection {
 
     /**
      *  @param id 0 to 0xffffffff
-     *  @throws RuntimeException if already set to nonzero
+     *  @throws IllegalStateException if already set to nonzero
      */
     public void setSendStreamId(long id) { 
         if (!_sendStreamId.compareAndSet(0, id))
-            throw new RuntimeException("Send stream ID already set [" + _sendStreamId + ", " + id + "]");
+            throw new IllegalStateException("Send stream ID already set [" + _sendStreamId + ", " + id + "]");
     }
     
     /**
@@ -896,11 +928,11 @@ class Connection {
 
     /**
      *  @param id 0 to 0xffffffff
-     *  @throws RuntimeException if already set to nonzero
+     *  @throws IllegalStateException if already set to nonzero
      */
     public void setReceiveStreamId(long id) { 
         if (!_receiveStreamId.compareAndSet(0, id))
-            throw new RuntimeException("Receive stream ID already set [" + _receiveStreamId + ", " + id + "]");
+            throw new IllegalStateException("Receive stream ID already set [" + _receiveStreamId + ", " + id + "]");
         synchronized (_connectLock) { _connectLock.notifyAll(); }
     }
     
@@ -1310,7 +1342,7 @@ class Connection {
         else
             buf.append(" to ");
         if (_remotePeer != null)
-            buf.append(_remotePeer.calculateHash().toBase64().substring(0,4));
+            buf.append(_remotePeer.toBase32());
         else
             buf.append("unknown");
         buf.append(" up ").append(DataHelper.formatDuration(_context.clock().now() - _createdOn));

@@ -16,9 +16,11 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import net.i2p.I2PAppContext;
 import net.i2p.crypto.DSAEngine;
+import net.i2p.crypto.EncType;
 import net.i2p.crypto.SigType;
 import net.i2p.util.Clock;
 import net.i2p.util.Log;
@@ -60,21 +62,21 @@ import net.i2p.util.RandomSource;
  * @author jrandom
  */
 public class LeaseSet extends DatabaseEntry {
-    private Destination _destination;
-    private PublicKey _encryptionKey;
-    private SigningPublicKey _signingKey;
+    protected Destination _destination;
+    protected PublicKey _encryptionKey;
+    protected SigningPublicKey _signingKey;
     // Keep leases in the order received, or else signature verification will fail!
-    private final List<Lease> _leases;
-    private boolean _receivedAsPublished;
+    protected final List<Lease> _leases;
+    protected boolean _receivedAsPublished;
     private boolean _receivedAsReply;
     // Store these since isCurrent() and getEarliestLeaseDate() are called frequently
     private long _firstExpiration;
-    private long _lastExpiration;
+    protected long _lastExpiration;
     private List<Lease> _decryptedLeases;
     private boolean _decrypted;
-    private boolean _checked;
+    protected boolean _checked;
     // cached byte version
-    private volatile byte _byteified[];
+    protected volatile byte _byteified[];
 
     /**
      *  Unlimited before 0.6.3;
@@ -132,19 +134,35 @@ public class LeaseSet extends DatabaseEntry {
     }
 
     /**
+     *  If more than one key, return the first supported one.
+     *  If none supported, return null.
+     *
+     *  @param supported what return types are allowed
+     *  @return ElGamal key or null if ElGamal not in supported
+     *  @since 0.9.44
+     */
+    public PublicKey getEncryptionKey(Set<EncType> supported) {
+        if (supported.contains(EncType.ELGAMAL_2048))
+                return _encryptionKey;
+        return null;
+    }
+
+    /**
      * @throws IllegalStateException if already signed
      */
     public void setEncryptionKey(PublicKey encryptionKey) {
         if (_signature != null)
             throw new IllegalStateException();
+        // subclasses may set an ECIES key
+        //if (encryptionKey.getType() != EncType.ELGAMAL_2048)
+        //    throw new IllegalArgumentException();
         _encryptionKey = encryptionKey;
     }
 
     /**
      *  The revocation key.
-     *  @deprecated unused
+     *  Undeprecated as of 0.9.38, used for the blinded key in EncryptedLeaseSet.
      */
-    @Deprecated
     public SigningPublicKey getSigningKey() {
         return _signingKey;
     }
@@ -187,7 +205,8 @@ public class LeaseSet extends DatabaseEntry {
     public void addLease(Lease lease) {
         if (lease == null) throw new IllegalArgumentException("erm, null lease");
         if (lease.getGateway() == null) throw new IllegalArgumentException("erm, lease has no gateway");
-        if (lease.getTunnelId() == null) throw new IllegalArgumentException("erm, lease has no tunnel");
+        if (getType() != KEY_TYPE_META_LS2 && lease.getTunnelId() == null)
+            throw new IllegalArgumentException("erm, lease has no tunnel");
         if (_signature != null)
             throw new IllegalStateException();
         if (_leases.size() >= MAX_LEASES)
@@ -288,23 +307,21 @@ public class LeaseSet extends DatabaseEntry {
         return _lastExpiration > now - fudge;
     }
 
+    /** without sig! */
     protected byte[] getBytes() {
         if (_byteified != null) return _byteified;
         if ((_destination == null) || (_encryptionKey == null) || (_signingKey == null))
             return null;
-        int len = _destination.size()
-                + PublicKey.KEYSIZE_BYTES // encryptionKey
-                + _signingKey.length() // signingKey
-                + 1
-                + _leases.size() * 44; // leases
+        int len = size();
         ByteArrayOutputStream out = new ByteArrayOutputStream(len);
         try {
             _destination.writeBytes(out);
             _encryptionKey.writeBytes(out);
             _signingKey.writeBytes(out);
             out.write((byte) _leases.size());
-            for (Lease lease : _leases)
+            for (Lease lease : _leases) {
                 lease.writeBytes(out);
+            }
         } catch (IOException ioe) {
             return null;
         } catch (DataFormatException dfe) {
@@ -361,8 +378,9 @@ public class LeaseSet extends DatabaseEntry {
         _encryptionKey.writeBytes(out);
         _signingKey.writeBytes(out);
         out.write((byte) _leases.size());
-        for (Lease lease : _leases)
+        for (Lease lease : _leases) {
             lease.writeBytes(out);
+        }
         _signature.writeBytes(out);
     }
     
@@ -374,7 +392,7 @@ public class LeaseSet extends DatabaseEntry {
              + PublicKey.KEYSIZE_BYTES // encryptionKey
              + _signingKey.length() // signingKey
              + 1 // number of leases
-             + _leases.size() * (Hash.HASH_LENGTH + 4 + 8);
+             + _leases.size() * 44;
     }
     
     @Override
@@ -388,7 +406,6 @@ public class LeaseSet extends DatabaseEntry {
                && DataHelper.eq(getEncryptionKey(), ls.getEncryptionKey())
                && DataHelper.eq(_signingKey, ls.getSigningKey())
                && DataHelper.eq(_destination, ls.getDestination());
-
     }
     
     /** the destination has enough randomness in it to use it by itself for speed */
@@ -403,10 +420,12 @@ public class LeaseSet extends DatabaseEntry {
     public String toString() {
         StringBuilder buf = new StringBuilder(128);
         buf.append("[LeaseSet: ");
-        buf.append("\n\tDestination: ").append(_destination);
+        if (_destination != null) {
+            buf.append("\n\tDestination: ").append(_destination);
+            buf.append("\n\tB32: ").append(_destination.toBase32());
+        }
         buf.append("\n\tEncryptionKey: ").append(_encryptionKey);
         buf.append("\n\tSigningKey: ").append(_signingKey);
-        //buf.append("\n\tVersion: ").append(getVersion());
         buf.append("\n\tSignature: ").append(_signature);
         buf.append("\n\tLeases: #").append(getLeaseCount());
         for (int i = 0; i < getLeaseCount(); i++)

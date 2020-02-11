@@ -5,6 +5,9 @@
     <target name="builddep">
         <!-- noop, since the core doesnt depend on anything -->
     </target>
+    <condition property="no.bundle">
+        <isfalse value="${require.gettext}" />
+    </condition>
     <condition property="depend.available">
         <typefound name="depend" />
     </condition>
@@ -20,6 +23,7 @@
     <property name="javac.compilerargs" value="" />
     <property name="javac.classpath" value="" />
     <property name="javac.version" value="1.7" />
+    <property name="manifest.classpath.name" value="Class-Path" />
 
     <!-- fixups if we're using libintl.jar for GettextResource.java -->
     <condition property="source.exclude1" value="gnu/gettext/GettextResource.java" else="NOTHING" >
@@ -45,7 +49,14 @@
     <condition property="javac.classpath.mod3" value="build/httpclient.jar:build/httpcore.jar:" else="" >
         <istrue value="${with-libhttpclient-java}" />
     </condition>
-    <property name="javac.classpath.mod" value="${javac.classpath.mod1}${javac.classpath.mod2}${javac.classpath.mod3}${javac.classpath}" />
+    <!-- fixups if we're using json-simple.jar for org.json.simple classes -->
+    <condition property="source.exclude4" value="org/json/simple/**" else="NOTHING" >
+        <istrue value="${with-libjson-simple-java}" />
+    </condition>
+    <condition property="javac.classpath.mod4" value="build/json-simple.jar:" else="" >
+        <istrue value="${with-libjson-simple-java}" />
+    </condition>
+    <property name="javac.classpath.mod" value="${javac.classpath.mod1}${javac.classpath.mod2}${javac.classpath.mod3}${javac.classpath.mod4}${javac.classpath}" />
 
     <!-- jar classpath fixups -->
     <condition property="gettext.jar" value="/usr/share/java/libintl.jar" else="" >
@@ -57,6 +68,9 @@
     <condition property="httpclient.jar" value="/usr/share/java/httpclient.jar /usr/share/java/httpcore.jar" else="" >
         <istrue value="${with-libhttpclient-java}" />
     </condition>
+    <condition property="json-simple.jar" value="/usr/share/java/json-simple.jar" else="" >
+        <istrue value="${with-libjson-simple-java}" />
+    </condition>
 
     <target name="compile" depends="depend">
         <mkdir dir="./build" />
@@ -65,12 +79,14 @@
         <javac sourcepath="" srcdir="./src" debug="true" source="${javac.version}" target="${javac.version}" deprecation="on"
                debuglevel="lines,vars,source"
                includeAntRuntime="false"
+               encoding="UTF-8"
                destdir="./build/obj" classpath="${javac.classpath.mod}" >
             <compilerarg line="${javac.compilerargs}" />
             <include name="**/*.java" />
             <exclude name="${source.exclude1}" />
             <exclude name="${source.exclude2}" />
             <exclude name="${source.exclude3}" />
+            <exclude name="${source.exclude4}" />
         </javac>
     </target>
 
@@ -88,7 +104,7 @@
         </exec>
     </target>
 
-    <target name="jar" depends="compile, jarUpToDate, listChangedFiles" unless="jar.uptodate" >
+    <target name="jar" depends="compile, bundle, jarUpToDate, listChangedFiles" unless="jar.uptodate" >
         <!-- set if unset -->
         <property name="workspace.changes.tr" value="" />
         <jar destfile="./build/i2p.jar" >
@@ -96,7 +112,7 @@
             <!-- the getopt translation files -->
             <fileset dir="src" includes="${translation.includes}" />
             <manifest>
-                <attribute name="Class-Path" value="${gettext.jar} ${getopt.jar} ${httpclient.jar}" />
+                <attribute name="${manifest.classpath.name}" value="${gettext.jar} ${getopt.jar} ${httpclient.jar}" />
                 <attribute name="Specification-Title" value="I2P Core API" />
                 <attribute name="Specification-Version" value="${release.number}" />
                 <attribute name="Specification-Vendor" value="The I2P Project https://geti2p.net/" />
@@ -120,10 +136,83 @@
         </uptodate>
     </target>
 
+    <target name="bundle" unless="no.bundle">
+        <mkdir dir="build/messages-src" />
+        <exec executable="sh" osfamily="unix" failifexecutionfails="true" failonerror="${require.gettext}" >
+            <env key="JAVA_HOME" value="${java.home}" />
+            <arg value="./bundle-messages.sh" />
+        </exec>
+        <exec executable="sh" osfamily="mac" failifexecutionfails="true" failonerror="${require.gettext}" >
+            <arg value="./bundle-messages.sh" />
+        </exec>
+        <exec executable="sh" osfamily="windows" failifexecutionfails="false" >
+            <arg value="./bundle-messages.sh" />
+        </exec>
+        <javac source="${javac.version}" target="${javac.version}" 
+               includeAntRuntime="false"
+               encoding="UTF-8"
+               srcdir="build/messages-src" destdir="build/obj">
+            <compilerarg line="${javac.compilerargs}" />
+        </javac>
+    </target>
+
+    <target name="poupdate">
+        <!-- Update the messages_*.po files.  -->
+        <!-- set if unset -->
+        <property name="lg2" value="" />
+        <exec executable="sh" osfamily="unix" failifexecutionfails="true" failonerror="true" >
+            <env key="LG2" value="${lg2}" />
+            <arg value="./bundle-messages.sh" />
+            <arg value="-p" />
+        </exec>
+        <exec executable="sh" osfamily="mac" failifexecutionfails="true" failonerror="true" >
+            <env key="LG2" value="${lg2}" />
+            <arg value="./bundle-messages.sh" />
+            <arg value="-p" />
+        </exec>
+        <exec executable="sh" osfamily="windows" failifexecutionfails="true" failonerror="true" >
+            <env key="LG2" value="${lg2}" />
+            <arg value="./bundle-messages.sh" />
+            <arg value="-p" />
+        </exec>
+    </target>
+
     <target name="javadoc">
         <mkdir dir="./build" />
         <mkdir dir="./build/javadoc" />
-        <javadoc sourcepath="./src:./test/junit" destdir="./build/javadoc" packagenames="*" use="true" splitindex="true" windowtitle="I2P SDK" />
+        <javadoc access="package"
+            source="${javac.version}"
+            destdir="./build/javadoc"
+            packagenames="*"
+            use="true"
+            splitindex="true"
+            failonerror="true"
+            additionalparam="-notimestamp"
+            doctitle="I2P Javadocs for Release ${release.number} Build ${i2p.build.number}${build.extra}"
+            windowtitle="I2P Anonymous Network - Java Documentation - Version ${release.number}">
+            <group title="Core SDK (i2p.jar)" packages="*" />
+            <sourcepath>
+                <pathelement location="./src" />
+                <pathelement location="./test/junit" />
+            </sourcepath>
+            <classpath>
+                <pathelement location="${hamcrest.home}/hamcrest-core.jar" />
+                <pathelement location="${hamcrest.home}/hamcrest-library.jar" />
+                <pathelement location="${hamcrest.home}/hamcrest-integration.jar" />
+                <pathelement location="${hamcrest.home}/hamcrest-all.jar" />
+                <pathelement location="${junit.home}/junit4.jar" />
+                <!-- following are only for debian builds -->
+                <pathelement location="build/libintl.jar" />
+                <pathelement location="build/gnu-getopt.jar" />
+                <pathelement location="build/json-simple.jar" />
+            </classpath>
+            <!-- These variables are stored in build.properties.
+                  End-users can override by creating the file override.properties -->
+            <link offline="true" href="${javasedocs.url}" packagelistLoc="../../installer/resources/package-lists/java/" />
+            <link offline="true" href="${javaeedocs.url}" packagelistLoc="../../installer/resources/package-lists/javaee/" />
+            <link offline="true" href="${jettydocs.url}" packagelistLoc="../../installer/resources/package-lists/jetty/" />
+            <link offline="true" href="${wrapperdocs.url}" packagelistLoc="../../installer/resources/package-lists/wrapper/" />
+        </javadoc>
     </target>
 
     <!-- for Maven Central -->
@@ -159,7 +248,7 @@
         <mkdir dir="./build/obj_scala" />
         <scalac srcdir="./test/scalatest" destdir="./build/obj_scala" deprecation="on" >
             <classpath>
-                <pathelement location="${javac.classpath.mod}" />
+                <pathelement path="${javac.classpath.mod}" />
                 <pathelement location="${scala-library.jar}" />
                 <pathelement location="${scalactic.jar}" />
                 <pathelement location="${scalatest.jar}" />
@@ -181,6 +270,7 @@
         <javac srcdir="./test/junit" debug="true" source="${javac.version}" target="${javac.version}" deprecation="on"
                debuglevel="lines,vars,source"
                includeAntRuntime="true"
+               encoding="UTF-8"
                excludes="${source.exclude}"
                destdir="./build/obj" >
             <classpath>
@@ -193,14 +283,6 @@
             </classpath>
             <compilerarg line="${javac.compilerargs}" />
         </javac>
-        <!-- EdDSA test vectors -->
-        <copy todir="./build/obj">
-            <fileset dir="./test/junit/">
-                <include name="net/i2p/crypto/eddsa/test.data"/>
-                <include name="net/i2p/crypto/eddsa/math/baseDblPrecmp"/>
-                <include name="net/i2p/crypto/eddsa/math/basePrecmp"/>
-            </fileset>
-        </copy>
     </target>
     <!-- jars with tests -->
     <target name="jarScalaTest" depends="scalatest.compileTest">
@@ -255,7 +337,6 @@
                 <exclude name="freenet/**/*.class" />
                 <exclude name="gnu/**/*.class" />
                 <exclude name="net/metanotion/**/*.class" />
-                <exclude name="org/bouncycastle/**/*.class" />
                 <exclude name="org/xlattice/**/*.class" />
             </fileset>
         </cobertura-instrument>
@@ -277,6 +358,7 @@
                 <pathelement location="${scalatest.jar}" />
                 <pathelement location="./build/obj_cobertura" />
                 <pathelement location="./build/obj" />
+                <pathelement location="./test/resources" />
                 <pathelement location="../../build/jbigi.jar" />
                 <pathelement location="${with.clover}" />
                 <pathelement location="${with.cobertura}" />
@@ -319,6 +401,7 @@
                 <pathelement location="${junit.home}/junit4.jar" />
                 <pathelement location="./build/obj_cobertura" />
                 <pathelement location="./build/obj" />
+                <pathelement location="./test/resources" />
                 <pathelement location="../../build/jbigi.jar" />
                 <pathelement location="${with.clover}" />
                 <pathelement location="${with.cobertura}" />
@@ -327,7 +410,6 @@
                 <fileset dir="./test/junit/">
                     <include name="**/*Test.java" />
                     <include name="**/*IT.java" if="runIntegrationTests" />
-                    <exclude name="**/ElGamalAESEngineTest.java" />
                     <exclude name="**/StructureTest.java" />
                     <exclude name="**/AbstractFieldElementTest.java" />
                     <!-- DataHelperTest is *very* slow with cobertura -->
@@ -408,6 +490,7 @@
         <javac srcdir="./bench" debug="true" source="${javac.version}" target="${javac.version}" deprecation="on"
                debuglevel="lines,vars,source"
                includeAntRuntime="false"
+               encoding="UTF-8"
                destdir="./build/obj_bench" >
             <classpath>
                 <pathelement location="${jmh.home}/jmh-core.jar" />

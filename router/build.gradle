@@ -1,10 +1,11 @@
-apply plugin: 'java-library'
+plugins {
+    id 'java-library'
+}
 
 sourceSets {
     main {
         java {
             srcDir 'java/src'
-            exclude 'com/maxmind'
         }
     }
     test {
@@ -21,13 +22,15 @@ sourceSets {
 
 dependencies {
     api project(':core')
-    implementation 'com.maxmind.geoip:geoip-api:1.3.1'
     implementation 'gnu.getopt:java-getopt:1.0.13'
     testImplementation project(path: ':core', configuration: 'tests')
 }
 
 jar {
     manifest {
+        attributes 'Specification-Title': 'I2P Router'
+        attributes 'Implementation-Title': 'I2P Java Router'
+        attributes 'Main-Class': 'net.i2p.router.CommandLine'
         // so people with very old wrapper.config files will still work with Jetty 6
         attributes 'Class-Path': 'jetty-i2p.jar jetty-java5-threadpool.jar jetty-rewrite-handler.jar jetty-sslengine.jar jetty-start.jar jetty-util.jar'
     }

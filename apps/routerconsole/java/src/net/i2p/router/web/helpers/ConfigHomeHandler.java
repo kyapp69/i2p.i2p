@@ -18,7 +18,6 @@ public class ConfigHomeHandler extends FormHandler {
 
     @Override
     protected void processForm() {
-        if (_action == null) return;
         String group = getJettyString("group");
         boolean deleting = _action.equals(_t("Delete selected"));
         boolean adding = _action.equals(_t("Add item"));
@@ -42,6 +41,12 @@ public class ConfigHomeHandler extends FormHandler {
             } else if ("3".equals(group)) {
                 prop = SearchHelper.PROP_ENGINES;
                 dflt = SearchHelper.ENGINES_DEFAULT;
+            } else if ("4".equals(group)) {
+                prop = HomeHelper.PROP_CONFIG;
+                dflt = HomeHelper.DEFAULT_CONFIG;
+            } else if ("5".equals(group)) {
+                prop = HomeHelper.PROP_MONITORING;
+                dflt = HomeHelper.DEFAULT_MONITORING;
             } else {
                 addFormError("Bad group");
                 return;
@@ -75,11 +80,15 @@ public class ConfigHomeHandler extends FormHandler {
                 //url = DataHelper.escapeHTML(url).replace(",", "&#44;");
                 name = name.replace(",", ".");
                 url = url.replace(",", "."); // fail
-                App app = null;
+                App app;
                 if ("1".equals(group))
                     app = new App(name, "", url, "/themes/console/images/eepsite.png");
                 else if ("2".equals(group))
                     app = new App(name, "", url, "/themes/console/images/title_window.png");
+                else if ("4".equals(group))
+                    app = new App(name, "", url, "/themes/console/images/server.png");
+                else if ("5".equals(group))
+                    app = new App(name, "", url, "/themes/console/images/chart_line.png");
                 else
                     app = new App(name, "", url, "/themes/console/images/question.png");
                 apps.add(app);

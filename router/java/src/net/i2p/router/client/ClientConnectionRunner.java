@@ -26,7 +26,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import net.i2p.client.I2PClient;
 import net.i2p.crypto.SessionKeyManager;
+import net.i2p.data.DatabaseEntry;
+import net.i2p.data.DataHelper;
 import net.i2p.data.Destination;
+import net.i2p.data.EncryptedLeaseSet;
 import net.i2p.data.Hash;
 import net.i2p.data.LeaseSet;
 import net.i2p.data.Payload;
@@ -45,6 +48,8 @@ import net.i2p.router.Job;
 import net.i2p.router.JobImpl;
 import net.i2p.router.RouterContext;
 import net.i2p.router.crypto.TransientSessionKeyManager;
+import net.i2p.router.crypto.ratchet.RatchetSKM;
+import net.i2p.router.crypto.ratchet.MuxedSKM;
 import net.i2p.util.ConcurrentHashSet;
 import net.i2p.util.I2PThread;
 import net.i2p.util.Log;
@@ -98,6 +103,7 @@ class ClientConnectionRunner {
     /** For inbound traffic. true if i2cp.fastReceive = "true"; @since 0.9.4 */
     private boolean _dontSendMSMOnReceive;
     private final AtomicInteger _messageId; // messageId counter
+    private Hash _encryptedLSHash;
     
     // Was 32767 since the beginning (04-2004).
     // But it's 4 bytes in the I2CP spec and stored as a long in MessageID....
@@ -124,7 +130,10 @@ class ClientConnectionRunner {
         SessionConfig config;
         LeaseRequestState leaseRequest;
         Rerequest rerequestTimer;
+        /** possibly decrypted */
         LeaseSet currentLeaseSet;
+        /** only if encrypted */
+        LeaseSet currentEncryptedLeaseSet;
 
         SessionParams(Destination d, boolean isPrimary) {
             dest = d;
@@ -198,11 +207,17 @@ class ClientConnectionRunner {
         _acceptedPending.clear();
         if (_sessionKeyManager != null)
             _sessionKeyManager.shutdown();
+        if (_encryptedLSHash != null)
+            _manager.unregisterEncryptedDestination(this, _encryptedLSHash);
         _manager.unregisterConnection(this);
         // netdb may be null in unit tests
         if (_context.netDb() != null) {
             for (SessionParams sp : _sessions.values()) {
                 LeaseSet ls = sp.currentLeaseSet;
+                if (ls != null)
+                    _context.netDb().unpublish(ls);
+                // unpublish encrypted LS also
+                ls = sp.currentEncryptedLeaseSet;
                 if (ls != null)
                     _context.netDb().unpublish(ls);
                 if (!sp.isPrimary)
@@ -275,7 +290,10 @@ class ClientConnectionRunner {
         return _clientVersion;
     }
 
-    /** current client's sessionkeymanager */
+    /**
+     *  The current client's SessionKeyManager.
+     *  As of 0.9.44, returned implementation varies based on supported encryption types.
+     */
     public SessionKeyManager getSessionKeyManager() { return _sessionKeyManager; }
 
     /**
@@ -432,6 +450,10 @@ class ClientConnectionRunner {
                 LeaseSet ls = sp.currentLeaseSet;
                 if (ls != null)
                     _context.netDb().unpublish(ls);
+                // unpublish encrypted LS also
+                ls = sp.currentEncryptedLeaseSet;
+                if (ls != null)
+                    _context.netDb().unpublish(ls);
                 isPrimary = sp.isPrimary;
                 if (!isPrimary)
                     _context.tunnelManager().removeAlias(sp.dest);
@@ -445,6 +467,10 @@ class ClientConnectionRunner {
                     _log.info("Destroying remaining client subsession " + sp.sessionId);
                 _manager.unregisterSession(sp.sessionId, sp.dest);
                 LeaseSet ls = sp.currentLeaseSet;
+                if (ls != null)
+                    _context.netDb().unpublish(ls);
+                // unpublish encrypted LS also
+                ls = sp.currentEncryptedLeaseSet;
                 if (ls != null)
                     _context.netDb().unpublish(ls);
                 _context.tunnelManager().removeAlias(sp.dest);
@@ -524,15 +550,17 @@ class ClientConnectionRunner {
         if (!isPrimary) {
             // all encryption keys must be the same
             for (SessionParams sp : _sessions.values()) {
-                if (!dest.getPublicKey().equals(sp.dest.getPublicKey()))
+                if (!dest.getPublicKey().equals(sp.dest.getPublicKey())) {
+                    _log.error("LS pubkey mismatch");
                     return SessionStatusMessage.STATUS_INVALID;
+                }
             }
         }
         SessionParams sp = new SessionParams(dest, isPrimary);
         sp.config = config;
         SessionParams old = _sessions.putIfAbsent(destHash, sp);
         if (old != null)
-            return SessionStatusMessage.STATUS_INVALID;
+            return SessionStatusMessage.STATUS_DUP_DEST;
         // We process a few options here, but most are handled by the tunnel manager.
         // The ones here can't be changed later.
         Properties opts = config.getOptions();
@@ -540,10 +568,15 @@ class ClientConnectionRunner {
             _dontSendMSM = "none".equals(opts.getProperty(I2PClient.PROP_RELIABILITY, "").toLowerCase(Locale.US));
             _dontSendMSMOnReceive = Boolean.parseBoolean(opts.getProperty(I2PClient.PROP_FAST_RECEIVE));
         }
+
+        // Set up the
         // per-destination session key manager to prevent rather easy correlation
+        // based on the specified encryption types in the config
         if (isPrimary && _sessionKeyManager == null) {
             int tags = TransientSessionKeyManager.DEFAULT_TAGS;
             int thresh = TransientSessionKeyManager.LOW_THRESHOLD;
+            boolean hasElg = false;
+            boolean hasEC = false;
             if (opts != null) {
                 String ptags = opts.getProperty(PROP_TAGS);
                 if (ptags != null) {
@@ -553,8 +586,37 @@ class ClientConnectionRunner {
                 if (pthresh != null) {
                     try { thresh = Integer.parseInt(pthresh); } catch (NumberFormatException nfe) {}
                 }
+                String senc = opts.getProperty("i2cp.leaseSetEncType");
+                if (senc != null) {
+                    String[] senca = DataHelper.split(senc, ",");
+                    for (String sencaa : senca) {
+                        if (sencaa.equals("0"))
+                            hasElg = true;
+                        else if (sencaa.equals("4"))
+                            hasEC = true;
+                    }
+                } else {
+                    hasElg = true;
+                }
+            } else {
+                hasElg = true;
             }
-            _sessionKeyManager = new TransientSessionKeyManager(_context, tags, thresh);
+            if (hasElg) {
+                TransientSessionKeyManager tskm = new TransientSessionKeyManager(_context, tags, thresh);
+                if (hasEC) {
+                    RatchetSKM rskm = new RatchetSKM(_context);
+                    _sessionKeyManager = new MuxedSKM(tskm, rskm);
+                } else {
+                    _sessionKeyManager = tskm;
+                }
+            } else {
+                if (hasEC) {
+                    _sessionKeyManager = new RatchetSKM(_context);
+                } else {
+                    _log.error("No supported encryption types in i2cp.leaseSetEncType for " + dest.toBase32());
+                    return SessionStatusMessage.STATUS_INVALID;
+                }
+            }
         }
         return _manager.destinationEstablished(this, dest);
     }
@@ -587,6 +649,8 @@ class ClientConnectionRunner {
     /** 
      * called after a new leaseSet is granted by the client, the NetworkDb has been
      * updated.  This takes care of all the LeaseRequestState stuff (including firing any jobs)
+     *
+     * @param ls if encrypted, the encrypted LS, not the decrypted one
      */
     void leaseSetCreated(LeaseSet ls) {
         Hash h = ls.getDestination().calculateHash();
@@ -595,6 +659,11 @@ class ClientConnectionRunner {
             return;
         LeaseRequestState state;
         synchronized (this) {
+            if (ls.getType() == DatabaseEntry.KEY_TYPE_ENCRYPTED_LS2) {
+                EncryptedLeaseSet encls = (EncryptedLeaseSet) ls;
+                sp.currentEncryptedLeaseSet = encls;
+                ls = encls.getDecryptedLeaseSet();
+            }
             sp.currentLeaseSet = ls;
             state = sp.leaseRequest;
             if (state == null) {
@@ -606,13 +675,37 @@ class ClientConnectionRunner {
             } else {
                 state.setIsSuccessful(true);
                 if (_log.shouldLog(Log.DEBUG))
-                    _log.debug("LeaseSet created fully: " + state + " / " + ls);
+                    _log.debug("LeaseSet created fully: " + state + '\n' + ls);
                 sp.leaseRequest = null;
                 _consecutiveLeaseRequestFails = 0;
             }
         }
         if ( (state != null) && (state.getOnGranted() != null) )
             _context.jobQueue().addJob(state.getOnGranted());
+    }
+
+    /**
+     *  Call after destinationEstablished(),
+     *  when an encrypted leaseset is created, so we know it's local.
+     *  Add to the clients list. Check for a dup hash.
+     *  Caller must call runner.disconnectClient() on failure.
+     *
+     *  @param hash the location of the encrypted LS, will change every day
+     *  @return success, false on dup
+     *  @since 0.9.39
+     */
+    public boolean registerEncryptedLS(Hash hash) {
+        boolean rv = true;
+        synchronized(this) {
+            if (!hash.equals(_encryptedLSHash)) {
+                if (_encryptedLSHash != null)
+                    _manager.unregisterEncryptedDestination(this, _encryptedLSHash);
+                rv = _manager.registerEncryptedDestination(this, hash);
+                if (rv)
+                    _encryptedLSHash = hash;
+            }
+        }
+        return rv;
     }
     
     /**
@@ -812,20 +905,22 @@ class ClientConnectionRunner {
         //  so the comparison will always work.
         int leases = set.getLeaseCount();
         // synch so _currentLeaseSet isn't changed out from under us
-        LeaseSet current = null;
+        LeaseSet current;
         Destination dest = sp.dest;
         LeaseRequestState state;
         synchronized (this) {
             current = sp.currentLeaseSet;
-            if (current != null && current.getLeaseCount() == leases) {
+            // Skip this check for meta, for now, TODO
+            if (current != null && current.getLeaseCount() == leases &&
+                current.getType() != DatabaseEntry.KEY_TYPE_META_LS2) {
                 for (int i = 0; i < leases; i++) {
                     if (! current.getLease(i).getTunnelId().equals(set.getLease(i).getTunnelId()))
                         break;
                     if (! current.getLease(i).getGateway().equals(set.getLease(i).getGateway()))
                         break;
                     if (i == leases - 1) {
-                        if (_log.shouldLog(Log.INFO))
-                            _log.info("Requested leaseSet hasn't changed");
+                        if (_log.shouldDebug())
+                            _log.debug("Requested leaseSet hasn't changed");
                         if (onCreateJob != null)
                             _context.jobQueue().addJob(onCreateJob);
                         return; // no change
@@ -872,7 +967,8 @@ class ClientConnectionRunner {
                 } else {
                     // so the timer won't fire off with an older LS request
                     sp.rerequestTimer = null;
-                    sp.leaseRequest = state = new LeaseRequestState(onCreateJob, onFailedJob,
+                    long earliest = (current != null) ? current.getEarliestLeaseDate() : 0;
+                    sp.leaseRequest = state = new LeaseRequestState(onCreateJob, onFailedJob, earliest,
                                                                 _context.clock().now() + expirationTime, set);
                     if (_log.shouldLog(Log.DEBUG))
                         _log.debug("New request: " + state);

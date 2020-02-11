@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Set;
 
 import net.i2p.I2PException;
+import net.i2p.client.I2PClient;
 import net.i2p.crypto.SigType;
 import net.i2p.data.Base64;
 import net.i2p.data.DataHelper;
@@ -212,6 +213,31 @@ public class EditBean extends IndexBean {
     }
     
     /**
+     *  @since 0.9.40
+     */
+    public String getEncryptMode(int tunnel) {
+        return Integer.toString(_helper.getEncryptMode(tunnel));
+    }
+    
+    /**
+     *  @since 0.9.40
+     */
+    public String getBlindedPassword(int tunnel) {
+        return _helper.getBlindedPassword(tunnel);
+    }
+    
+    /**
+     *  List of b64 name : b64key
+     *  Pubkeys for DH, privkeys for PSK
+     *  @param isDH true for DH, false for PSK
+     *  @return non-null
+     *  @since 0.9.41
+     */
+    public List<String> getClientAuths(int tunnel, boolean isDH) {
+        return _helper.getClientAuths(tunnel, isDH);
+    }
+    
+    /**
      *  @param newTunnelType used if tunnel &lt; 0
      *  @since 0.9.12
      */
@@ -231,6 +257,14 @@ public class EditBean extends IndexBean {
         if (getDestination(tunnel) != null)
             return false;
         return getTunnelStatus(tunnel) == GeneralHelper.NOT_RUNNING;
+    }
+
+    /**
+     *  @param encType code
+     *  @since 0.9.44
+     */
+    public boolean hasEncType(int tunnel, int encType) {
+        return _helper.hasEncType(tunnel, encType);
     }
 
     /**
@@ -268,6 +302,13 @@ public class EditBean extends IndexBean {
     
     public String getAccessList(int tunnel) {
         return _helper.getAccessList(tunnel);
+    }
+
+    /**
+     *  @since 0.9.40
+     */
+    public String getFilterDefinition(int tunnel) {
+        return _helper.getFilterDefinition(tunnel);
     }
     
     public String getJumpList(int tunnel) {
@@ -446,7 +487,7 @@ public class EditBean extends IndexBean {
         if (tun != null)
             return tun.getI2CPPort();
         else
-            return "7654";
+            return Integer.toString(I2PClient.DEFAULT_LISTEN_PORT);
     }
 
     public String getCustomOptions(int tunnel) {

@@ -28,12 +28,14 @@
         <target name="compile" depends="init">
             <javac debug="true" deprecation="on" source="${javac.version}" target="${javac.version}" 
                        includeAntRuntime="false"
+                       encoding="UTF-8"
                        srcdir="${src}" destdir="${build}">
                 <compilerarg line="${javac.compilerargs}" />
                 <classpath>
                     <pathelement location="../../core/java/build/i2p.jar" />
                     <pathelement location="../../installer/lib/wrapper/all/wrapper.jar" />
                     <pathelement location="../../router/java/build/router.jar" />
+                    <pathelement location="../systray/java/build/systray.jar" />
                 </classpath>
             </javac>
         </target>
@@ -51,6 +53,7 @@
             </exec>
             <javac source="${javac.version}" target="${javac.version}" 
                    includeAntRuntime="false"
+                   encoding="UTF-8"
                    srcdir="${build}/messages-src" destdir="${build}">
                 <compilerarg line="${javac.compilerargs}" />
             </javac>

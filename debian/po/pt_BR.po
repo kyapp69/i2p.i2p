@@ -1,17 +1,18 @@
 # SOME DESCRIPTIVE TITLE.
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the PACKAGE package.
+# This file is distributed under the same license as the i2p package.
 # 
 # Translators:
+# dark crystal <darc.krystal@insicuri.net>, 2018
 # blueboy, 2014-2015
 # Victor Maximiliano <VicBrd09@mail2tor.com>, 2014
 msgid ""
 msgstr ""
 "Project-Id-Version: I2P\n"
-"Report-Msgid-Bugs-To: https://trac.i2p2.de/\n"
-"POT-Creation-Date: 2015-02-18 22:14+0000\n"
-"PO-Revision-Date: 2017-06-30 21:32+0000\n"
-"Last-Translator: blueboy\n"
+"Report-Msgid-Bugs-To: i2p@packages.debian.org\n"
+"POT-Creation-Date: 2017-11-12 14:01+0000\n"
+"PO-Revision-Date: 2018-09-30 18:27+0000\n"
+"Last-Translator: dark crystal <darc.krystal@insicuri.net>\n"
 "Language-Team: Portuguese (Brazil) (http://www.transifex.com/otf/I2P/language/pt_BR/)\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -80,8 +81,8 @@ msgstr "Roteadores de alta velocidade, assim como roteadores com uma porção de
 #. Type: boolean
 #. Description
 #: ../i2p.templates:5001
-msgid "Run I2P daemon confined with AppArmor"
-msgstr "Confinar a execução do daemon I2P com AppArmor"
+msgid "Should the I2P daemon be confined with AppArmor?"
+msgstr "Manter o daemon I2P confinado com o AppArmor?"
 
 #. Type: boolean
 #. Description

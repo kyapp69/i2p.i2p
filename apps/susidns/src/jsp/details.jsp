@@ -1,7 +1,7 @@
 <%
 /*
  *  This file is part of susidns project, see http://susi.i2p/
- *  
+ *
  *  Copyright (C) 2005 <susi23@mail.i2p>
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -17,21 +17,10 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *  
+ *
  */
-
-    // http://www.crazysquirrel.com/computing/general/form-encoding.jspx
-    if (request.getCharacterEncoding() == null)
-        request.setCharacterEncoding("UTF-8");
-
-    response.setHeader("X-Frame-Options", "SAMEORIGIN");
-    response.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'");
-    response.setHeader("X-XSS-Protection", "1; mode=block");
-    response.setHeader("X-Content-Type-Options", "nosniff");
-    response.setHeader("Referrer-Policy", "no-referrer");
-    response.setHeader("Accept-Ranges", "none");
-
 %>
+<%@include file="headers.jsi" %>
 <%@page pageEncoding="UTF-8"%>
 <%@ page contentType="text/html"%>
 <%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core"%>
@@ -49,9 +38,6 @@
 </head>
 <body>
 <div class="page">
-<div id="logo">
-<a href="index"><img src="<%=book.getTheme()%>images/logo.png" alt="" title="<%=intl._t("Overview")%>" border="0"/></a>
-</div>
 <hr>
 <div id="navi">
 <a id="overview" href="index"><%=intl._t("Overview")%></a>&nbsp;

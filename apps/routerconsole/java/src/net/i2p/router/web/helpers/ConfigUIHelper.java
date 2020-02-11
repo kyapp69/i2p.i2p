@@ -35,9 +35,7 @@ public class ConfigUIHelper extends HelperBase {
             if (theme.equals(current))
                 buf.append(CHECKED);
             buf.append("value=\"").append(theme).append("\" id=\"").append(theme).append("\">" +
-                       "<object height=\"48\" width=\"48\" data=\"/themes/console/").append(theme).append("/images/thumbnail.png\">" +
-                       "<img height=\"48\" width=\"48\" alt=\"\" src=\"/themes/console/images/thumbnail.png\">" +
-                       "</object><br>" +
+                       "<img height=\"48\" width=\"48\" alt=\"\" src=\"/themes/console/").append(theme).append("/images/thumbnail.png\">" +
                        "<div class=\"themelabel\">").append(_t(theme)).append("</div>" +
                        "</div></label>\n");
         }
@@ -131,6 +129,7 @@ public class ConfigUIHelper extends HelperBase {
         { "de", "de", "Deutsch", null },
         { "et", "ee", "Eesti", null },
         { "es", "es", "Español", null },
+        { "fa", "ir", "Persian فارسی", null },
         { "fr", "fr", "Français", null },
         { "gl", "lang_gl", "Galego", null },
         { "el", "gr", "Greek Ελληνικά", null },
@@ -186,17 +185,18 @@ public class ConfigUIHelper extends HelperBase {
                 current = "en";
         }
         StringBuilder buf = new StringBuilder(512);
+        buf.append("  <select name=\"lang\" id=\"langsettings\">\n");
         for (int i = 0; i < langs.length; i++) {
             String lang = langs[i][0];
             if (lang.equals("xx") && !isAdvanced())
                 continue;
             // we use "lang" so it is set automagically in CSSHelper
-            buf.append("<label for=\"").append(lang).append("\"><div class=\"langselect\"><input type=\"radio\" class=\"optbox\" name=\"lang\" ");
+            buf.append("    <option class=\"optbox\" name=\"lang\" ");
             if (lang.equals(current))
-                buf.append(CHECKED);
-            buf.append("value=\"").append(lang).append("\" id=\"").append(lang).append("\">" +
-                       "<img height=\"48\" width=\"48\" alt=\"\" src=\"/flags.jsp?s=48&amp;c=").append(langs[i][1]).append("\">" +
-                       "<div class=\"ui_lang\">");
+                buf.append(SELECTED);
+
+            buf.append(" value=\"").append(lang).append("\"");
+            buf.append(" id=\"").append(lang).append("\"").append(">");
             int under = lang.indexOf('_');
             String slang = (under > 0) ? lang.substring(0, under) : lang;
             buf.append(langs[i][2]);
@@ -206,8 +206,9 @@ public class ConfigUIHelper extends HelperBase {
                    .append(name)
                    .append(')');
             }
-            buf.append("</div></div></label>\n");
+            buf.append("</option>\n");
         }
+        buf.append("  </select>\n");
         return buf.toString();
     }
 

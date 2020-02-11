@@ -82,13 +82,20 @@ Public domain except as listed below:
    Copyright (c) 1998 by Aaron M. Renn (arenn@urbanophile.com)
    See licenses/LICENSE-LGPLv2.1.txt
 
+   EdDSA-Java:
+   See licenses/LICENSE-CC0-1.0-Universal.txt
+
    HostnameVerifier:
    From Apache HttpClient 4.4.1 and HttpCore 4.4.1
    See licenses/LICENSE-Apache2.0.txt
 
-   json-smart-v1 1.3.1+
-   Copyright 2011 JSON-SMART authors
+   json-simple 1.1.1
+   (not included in most distribution packages)
    See licenses/LICENSE-Apache2.0.txt
+
+   Noise library:
+   Copyright (C) 2016 Southern Storm Software, Pty Ltd.
+   See licenses/LICENSE-Noise.txt
 
 
 Router (router.jar):
@@ -104,9 +111,19 @@ Public domain except as listed below:
    GeoIP API 1.3.1:
    See licenses/LICENSE-LGPLv2.1.txt
 
+   GeoIP2-java 2.12.0:
+   See licenses/LICENSE-Apache2.0.txt
+
+   Maxmind-DB-Reader-java 1.2.2:
+   See licenses/LICENSE-Apache2.0.txt
+
    Noise library:
    Copyright (C) 2016 Southern Storm Software, Pty Ltd.
    See licenses/LICENSE-Noise.txt
+
+   SparseArray:
+   Copyright (C) 2006 The Android Open Source Project
+   See licenses/LICENSE-Apache2.0.txt
 
 
 Installer:
@@ -154,9 +171,7 @@ Installer:
 
 GeoIP Data:
    (not included in most distribution packages)
-   GeoLite databases are licensed under a Creative Commons Attribution-ShareAlike 3.0 Unported License.
-   http://creativecommons.org/licenses/by-sa/3.0/
-   This product includes GeoLite data created by MaxMind, available from http://www.maxmind.com/
+   This product includes GeoLite2 data created by MaxMind, available from http://www.maxmind.com/
    See licenses/LICENSE-GeoIP.txt
 
 Launchers:
@@ -164,9 +179,10 @@ Launchers:
    Copyright (c) 2002-2018 EPFL, Lausanne / Lightbend, Inc. , unless otherwise specified.
    See licenses/LICENSE-Scala.md
 
-Java Service Wrapper Community Edition 32-bit 3.5.34:
+Java Service Wrapper Community Edition 3.5.39:
+   (Windows: 3.5.25)
    (not included in most distribution packages)
-   Copyright (C) 1999-2017 Tanuki Software, Ltd. All Rights Reserved.
+   Copyright (C) 1999-2019 Tanuki Software, Ltd. All Rights Reserved.
    See licenses/LICENSE-Wrapper.txt
 
 
@@ -176,7 +192,7 @@ Jbigi Libraries (jbigi.jar):
    GMP 4.3.2 / 5.0.2:
    Copyright 1991, 1996, 1999, 2000, 2007 Free Software Foundation, Inc.
    See licenses/LICENSE-LGPLv3.txt
-   GMP 6.0.0:
+   GMP 6.0.0 / 6.1.2:
    See licenses/LICENSE-GPLv2.txt
 
 
@@ -202,6 +218,14 @@ Applications:
    Common Development and Distribution License (CDDL) version 1.0 + GNU General Public License (GPL) version 2
    See https://glassfish.dev.java.net/public/CDDL+GPL.html
    See licenses/LICENSE-GPLv2.txt
+
+   I2PControl
+   See licenses/LICENSE-Apache2.0.txt
+   Includes jBCrypt:
+   Copyright (c) 2006 Damien Miller <djm@mindrot.org>
+   See licenses/LICENSE-jBCrypt.txt
+   Includes jsonrpc2 1.38.1 (base) 1.11 (server)
+   See licenses/LICENSE-Apache2.0.txt
 
    I2PSnark (i2psnark.jar, i2psnark.war):
    Copyright (C) 2003 Mark J. Wielaard
@@ -233,7 +257,7 @@ Applications:
      Zxing 3.3.0:
        See licenses/LICENSE-Apache2.0.txt
 
-   Jetty 9.2.25.v20180606 (jetty-*.jar, org.mortbay.*.jar):
+   Jetty 9.2.29.v20191105 (jetty-*.jar, org.mortbay.*.jar):
    (not included in most distribution packages, except for jetty-i2p.jar)
    See licenses/ABOUT-Jetty.html
    See licenses/NOTICE-Jetty.html
@@ -269,14 +293,25 @@ Applications:
          - All other flag icons: public domain, courtesy mjames@gmail.com http://www.famfamfam.com/
        FatCow icons: See licenses/LICENSE-FatCowIcons.txt
        Fugue Icons: See licenses/LICENSE-FugueIcons.txt
+       Feather icons: Copyright (c) 2013-2017 Cole Bemis; see licenses/LICENSE-Feather.txt
+
+   Router Console unthemed, light, and dark theme logos:
+   Copyright (c) 2019 The Invisible Internet Project. All rights reserved.
+   Creative Commons Attribution-ShareAlike 4.0 International License
+   See https://creativecommons.org/licenses/by-sa/4.0/
 
    Router Console and I2PSnark themes:
    Some images licensed under a Creative Commons 2.0 license.
        Silk icons: See licenses/LICENSE-SilkIcons.txt
 
-   I2PSnark light theme:
-   "Creative Commons Cat" licensed under a Creative Commons Attribution 3.0 Unported License.
-   Original photo by Boaz Arad. http://www.luxphile.com/2011/01/creative-commons-cat.html
+   Router Console M-Lab subsystem:
+   Copyright 2010 Vuze, Inc.  All rights reserved.
+   See licenses/LICENSE-GPLv2.txt
+
+   Router Console NDT subsystem:
+   Copyright (c) 2003 University of Chicago.  All rights reserved.
+   See licenses/LICENSE-NDT.txt
+   Notice: I2P has changed specified portions of the Software, including the package edu.internet2.ndt.
 
    SAM (sam.jar):
    Public domain.
@@ -297,9 +332,9 @@ Applications:
    Systray (systray.jar):
    Public domain.
 
-   Tomcat 8.5.30 (jasper-runtime.jar):
+   Tomcat 8.5.50 (jasper-runtime.jar):
    (not included in most distribution packages)
-   Copyright 1999-2018 The Apache Software Foundation
+   Copyright 1999-2019 The Apache Software Foundation
    See licenses/LICENSE-Apache2.0.txt
    See licenses/NOTICE-Tomcat.txt
 

@@ -89,6 +89,7 @@ class Mail {
 	public Date date;
 	private Buffer header, body;
 	private MailPart part;
+        /** May be null. Non-empty if non-null. Not HTML escaped. */
 	String[] to, cc;        // addresses only, enclosed by <>
 	private boolean isNew, isSpam;
 	public String contentType;
@@ -386,12 +387,10 @@ class Mail {
 
 	private static final DateFormat dateFormatter = new SimpleDateFormat("yyyy-MM-dd HH:mm");
 	private static final DateFormat localDateFormatter = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT);
-	private static final DateFormat longLocalDateFormatter = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT);
 	static {
 		// the router sets the JVM time zone to UTC but saves the original here so we can get it
 		TimeZone tz = SystemVersion.getSystemTimeZone();
 		localDateFormatter.setTimeZone(tz);
-		longLocalDateFormatter.setTimeZone(tz);
 	}
 
 	/**
@@ -403,8 +402,8 @@ class Mail {
 		synchronized(dateFormatter) {
 			formattedDate = dateFormatter.format( date );
 			localFormattedDate = localDateFormatter.format( date );
-			quotedDate = longLocalDateFormatter.format(date);
 		}
+		quotedDate = DataHelper.formatTime(dateLong);
 	}
 
 	/**

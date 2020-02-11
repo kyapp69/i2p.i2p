@@ -286,9 +286,10 @@ class OutboundMessageFragments {
                     // if there is nothing left to send.
                     // Otherwise, return the volley to be sent.
                     // Otherwise, wait()
+                    long now = _context.clock().now();
                     while (_iterator.hasNext()) {
                         peer = _iterator.next();
-                        int remaining = peer.finishMessages();
+                        int remaining = peer.finishMessages(now);
                         if (remaining <= 0) {
                             // race with add()
                             _iterator.remove();
@@ -461,10 +462,10 @@ class OutboundMessageFragments {
                               " data bytes to " + peer);
                 _context.statManager().addRateData("udp.sendFragmentsPerPacket", sendNext.size());
             }
-            sendNext.clear();
             if (pkt == null) {
                 if (_log.shouldLog(Log.WARN))
                     _log.info("Build packet FAIL for " + DataHelper.toString(sendNext) + " to " + peer);
+                sendNext.clear();
                 continue;
             }
             rv.add(pkt);
@@ -491,6 +492,7 @@ class OutboundMessageFragments {
             // following for debugging and stats
             pkt.setFragmentCount(sendNext.size());
             pkt.setMessageType(msgType);  //type of first fragment
+            sendNext.clear();
         }
 
 

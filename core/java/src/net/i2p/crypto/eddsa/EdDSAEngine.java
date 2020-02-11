@@ -1,6 +1,18 @@
+/**
+ * EdDSA-Java by str4d
+ *
+ * To the extent possible under law, the person who associated CC0 with
+ * EdDSA-Java has waived all copyright and related or neighboring rights
+ * to EdDSA-Java.
+ *
+ * You should have received a copy of the CC0 legalcode along with this
+ * work. If not, see <https://creativecommons.org/publicdomain/zero/1.0/>.
+ *
+ */
 package net.i2p.crypto.eddsa;
 
 import java.io.ByteArrayOutputStream;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
@@ -18,6 +30,7 @@ import java.util.Arrays;
 import net.i2p.crypto.eddsa.math.Curve;
 import net.i2p.crypto.eddsa.math.GroupElement;
 import net.i2p.crypto.eddsa.math.ScalarOps;
+import net.i2p.crypto.eddsa.math.bigint.BigIntegerLittleEndianEncoding;
 
 /**
  * Signing and verification for EdDSA.
@@ -55,10 +68,10 @@ import net.i2p.crypto.eddsa.math.ScalarOps;
  * @author str4d
  *
  */
-public final class EdDSAEngine extends Signature {
+public class EdDSAEngine extends Signature {
     public static final String SIGNATURE_ALGORITHM = "NONEwithEdDSA";
 
-    private MessageDigest digest;
+    protected MessageDigest digest;
     private ByteArrayOutputStream baos;
     private EdDSAKey key;
     private boolean oneShotMode;
@@ -129,7 +142,7 @@ public final class EdDSAEngine extends Signature {
         }
     }
 
-    private void digestInitSign(EdDSAPrivateKey privKey) {
+    protected void digestInitSign(EdDSAPrivateKey privKey) {
         // Preparing for hash
         // r = H(h_b,...,h_2b-1,M)
         int b = privKey.getParams().getCurve().getField().getb();
@@ -151,7 +164,7 @@ public final class EdDSAEngine extends Signature {
                 }
             } else if (!key.getParams().getHashAlgorithm().equals(digest.getAlgorithm()))
                 throw new InvalidKeyException("Key hash algorithm does not match chosen digest");
-        } else if (publicKey.getClass().getName().equals("sun.security.x509.X509Key")) {
+        } else if (publicKey.getFormat().equals("X.509")) {
             // X509Certificate will sometimes contain an X509Key rather than the EdDSAPublicKey itself; the contained
             // key is valid but needs to be instanced as an EdDSAPublicKey before it can be used.
             EdDSAPublicKey parsedPublicKey;
@@ -300,6 +313,11 @@ public final class EdDSAEngine extends Signature {
         h = key.getParams().getScalarOps().reduce(h);
 
         byte[] Sbyte = Arrays.copyOfRange(sigBytes, b/8, b/4);
+        // RFC 8032
+        BigInteger Sbigint = (new BigIntegerLittleEndianEncoding()).toBigInteger(Sbyte);
+        if (Sbigint.compareTo(EdDSABlinding.ORDER) >= 0)
+            return false;
+
         // R = SB - H(Rbar,Abar,M)A
         GroupElement R = key.getParams().getB().doubleScalarMultiplyVariableTime(
                 ((EdDSAPublicKey) key).getNegativeA(), h, Sbyte);

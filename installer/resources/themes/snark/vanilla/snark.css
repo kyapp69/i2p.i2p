@@ -102,7 +102,7 @@ a:link, a:visited {
 }
 
 .snarkCommentInfo th a:link, td a:link {
-     color: #cf0f00;
+     color: #9f0b00;
      text-decoration: none;
      font-weight: bold;
      word-wrap: break-word;
@@ -125,6 +125,7 @@ th a:active, th a:visited:active, td a:active, td a:visited:active {
 .toggleview, .snarkConfigTitle, .snarknavbar, img, input[type="image"] {
      -moz-user-select: none;
      -webkit-user-select: none;
+     -ms-user-select: none;
      user-select: none;
 }
 
@@ -288,7 +289,6 @@ _:-ms-lang(x), .snarkNav:link, .snarkNav:visited {
      height: 56px;
      width: auto;
      background: #3f3833;
-     background: url(images/whippy.png) no-repeat scroll right 5px bottom -7px, linear-gradient(to bottom, #5f554d, #3f3833);
      background-size: auto 105%, 100% 100%;
 }
 
@@ -629,7 +629,7 @@ th.snarkTorrentStatus {
 
 .snarkTorrentETA, .snarkTorrentUploaded, .snarkTorrentRateDown, .snarkTorrentRateUp {
      width: 5%;
-     min-width: 40px;
+     min-width: 70px;
      white-space: nowrap;
 }
 
@@ -912,6 +912,7 @@ _:-ms-lang(x), .snarkTorrents tbody tr:hover, .snarkDirInfo tbody tr:hover {
      color: #050;
      -moz-user-select: all;
      -webkit-user-select: all;
+     -ms-user-select: all;
      user-select: all;
 }
 
@@ -1012,7 +1013,7 @@ thead img.disable, img.disable:hover {
 /* download bars */
 
 .snarkTorrentDownloaded {
-     width: 110px !important;
+     width: 130px !important;
      text-align: right !important;
 }
 
@@ -1026,7 +1027,7 @@ thead img.disable, img.disable:hover {
 }
 
 .percentBarOuter, .percentBarText {
-     width: 110px;
+     width: 130px;
 }
 
 .snarkDirInfo .percentBarText, .snarkDirInfo .percentBarOuter {
@@ -1133,10 +1134,6 @@ thead img.disable, img.disable:hover {
 
 .unchoked {
      color: #008000 !important;
-}
-
-.choked, .unchoked {
-     font-style: italic;
 }
 
 .thumb {
@@ -1705,10 +1702,6 @@ a:hover img, a:focus img {
      mix-blend-mode: normal;
 }
 
-img[src$="magnet.png"] {
-     transform: rotate(-90deg);
-}
-
 img[src$="details.png"] {
      mix-blend-mode: luminosity;
 }
@@ -1852,6 +1845,7 @@ code, tt {
      font-family: "DejaVu Sans Mono", "Droid Sans Mono", "Lucida Console", monospace;
      -moz-user-select: all;
      -webkit-user-select: all;
+     -ms-user-select: all;
      user-select: all;
 }
 
@@ -1992,12 +1986,6 @@ input.toggle_input { /* hide checkbox and use label as faux panel heading */
 /* end panels toggle */
 
 /* debug */
-
-.debuginfo td:first-child {
-     background: url(images/debuginfo.png) center center no-repeat;
-     mix-blend-mode: luminosity !important;
-     background-size: 14px 14px;
-}
 
 .debuginfo b {
      text-transform: capitalize;
@@ -2344,7 +2332,7 @@ td#bwHelp a {
      white-space: nowrap;
      display: inline-block;
      vertical-align: middle;
-     margin-right: 3px;
+     margin-right: 8px;
 }
 
 /* Comments Section */
@@ -2496,7 +2484,6 @@ td#bwHelp a {
 
 .commentText {
      white-space: normal !important;
-     text-align: justify;
      padding-right: 0;
 }
 
@@ -2659,7 +2646,7 @@ td.snarkGraphicStatus img {
 }
 
 .percentBarOuter, .percentBarText, .snarkTorrentDownloaded {
-     width: 100px !important;
+     width: 130px !important;
 }
 
 .snarkFileStatus .percentBarText {

@@ -28,7 +28,7 @@ class ACKSender implements Runnable {
     private static final long POISON_PS = -9999999999l;
     
     /** how frequently do we want to send ACKs to a peer? */
-    static final int ACK_FREQUENCY = 250;
+    static final int ACK_FREQUENCY = 150;
     
     public ACKSender(RouterContext ctx, UDPTransport transport) {
         _context = ctx;
@@ -62,7 +62,7 @@ class ACKSender implements Runnable {
     
     public synchronized void shutdown() { 
         _alive = false;
-        PeerState poison = new PeerState(_context, _transport, new byte[4], 0, null, false);
+        PeerState poison = new PeerState(_context, _transport, new byte[4], 0, null, false, 0);
         poison.setTheyRelayToUsAs(POISON_PS);
         _peersToACK.offer(poison);
         for (int i = 1; i <= 5 && !_peersToACK.isEmpty(); i++) {
@@ -199,8 +199,8 @@ class ACKSender implements Runnable {
                         // still full packets left to be ACKed, since wanted time
                         // is reset by retrieveACKBitfields when all of the IDs are
                         // removed
-                        if (_log.shouldLog(Log.WARN))
-                            _log.warn("Rerequesting ACK for peer " + peer);
+                        if (_log.shouldInfo())
+                            _log.info("Precautionary rerequest ACK for peer " + peer);
                         ackPeer(peer);
                     }
                 } else {

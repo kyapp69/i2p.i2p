@@ -1,3 +1,51 @@
+i2p (0.9.44x-1~xenial+1) xenial; urgency=medium
+
+  * Backport to Xenial
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Sun, 01 Dec 2019 12:12:12 +0000
+
+i2p (0.9.43x-1~xenial+1) xenial; urgency=medium
+
+  * Backport to Xenial
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Tue, 22 Oct 2019 12:12:12 +0000
+
+i2p (0.9.42x-1~xenial+1) xenial; urgency=medium
+
+  * Backport to Xenial
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 28 Aug 2019 12:12:12 +0000
+
+i2p (0.9.41x-1~xenial+1) xenial; urgency=medium
+
+  * Backport to Xenial
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 3 Jul 2019 12:12:12 +0000
+
+i2p (0.9.40x-1~xenial+1) xenial; urgency=medium
+
+  * Backport to Xenial
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 8 May 2019 12:12:12 +0000
+
+i2p (0.9.39x-1~xenial+1) xenial; urgency=medium
+
+  * Backport to Xenial
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Fri, 22 Mar 2019 12:12:12 +0000
+
+i2p (0.9.38x-1~xenial+1) xenial; urgency=medium
+
+  * Backport to Xenial
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 23 Jan 2019 12:12:12 +0000
+
+i2p (0.9.37x-1~xenial+1) xenial; urgency=medium
+
+  * Backport to Xenial
+
+ -- zzz on i2p (key signing) <zzz@i2pmail.org>  Wed, 05 Oct 2018 12:12:12 +0000
+
 i2p (0.9.36x-1~xenial+1) xenial; urgency=medium
 
   * Backport to Xenial

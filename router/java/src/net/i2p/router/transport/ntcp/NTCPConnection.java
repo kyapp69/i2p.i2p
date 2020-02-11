@@ -288,14 +288,14 @@ public class NTCPConnection implements Closeable {
     /**
      *  Valid for inbound; valid for outbound shortly after creation
      */
-    public SocketChannel getChannel() { return _chan; }
+    public synchronized SocketChannel getChannel() { return _chan; }
 
     /**
      *  Valid for inbound; valid for outbound shortly after creation
      */
-    public SelectionKey getKey() { return _conKey; }
-    public void setChannel(SocketChannel chan) { _chan = chan; }
-    public void setKey(SelectionKey key) { _conKey = key; }
+    public synchronized SelectionKey getKey() { return _conKey; }
+    public synchronized void setChannel(SocketChannel chan) { _chan = chan; }
+    public synchronized void setKey(SelectionKey key) { _conKey = key; }
 
     public boolean isInbound() { return _isInbound; }
     public boolean isEstablished() { return _establishState.isComplete(); }
@@ -415,12 +415,30 @@ public class NTCPConnection implements Closeable {
     
     /** @return milliseconds */
     public long getTimeSinceSend() { return _context.clock().now()-_lastSendTime; }
+    
+    /**
+     * @return milliseconds
+     * @since 0.9.38
+     */
+    public long getTimeSinceSend(long now) { return now - _lastSendTime; }
 
     /** @return milliseconds */
     public long getTimeSinceReceive() { return _context.clock().now()-_lastReceiveTime; }
+    
+    /**
+     * @return milliseconds
+     * @since 0.9.38
+     */
+    public long getTimeSinceReceive(long now) { return now - _lastReceiveTime; }
 
     /** @return milliseconds */
     public long getTimeSinceCreated() { return _context.clock().now()-_created; }
+
+    /**
+     * @return milliseconds
+     * @since 0.9.38
+     */
+    public long getTimeSinceCreated(long now) { return now -_created; }
 
     /**
      *  @return when this connection was created (not established)
@@ -488,6 +506,7 @@ public class NTCPConnection implements Closeable {
         }
         NTCPConnection toClose = locked_close(allowRequeue);
         if (toClose != null && toClose != this) {
+            // won't happen as of 0.9.37
             if (_log.shouldLog(Log.WARN))
                 _log.warn("Multiple connections on remove, closing " + toClose + " (already closed " + this + ")");
             _context.statManager().addRateData("ntcp.multipleCloseOnRemove", toClose.getUptime());
@@ -507,7 +526,8 @@ public class NTCPConnection implements Closeable {
     }
 
     /**
-     * @return a second connection with the same peer...
+     * @return usually this, but could be a second connection with the same peer...
+     *         only this or null as of 0.9.37
      */
     private synchronized NTCPConnection locked_close(boolean allowRequeue) {
         if (_chan != null) try { _chan.close(); } catch (IOException ioe) { }
@@ -1105,7 +1125,12 @@ public class NTCPConnection implements Closeable {
      * async callback after the outbound connection was completed (this should NOT block, 
      * as it occurs in the selector thread)
      */
-    void outboundConnected() {
+    synchronized void outboundConnected() {
+        if (_establishState == EstablishBase.FAILED) {
+            _conKey.cancel();
+            try {_chan.close(); } catch (IOException ignored) {}
+            return;
+        }
         _conKey.interestOps(_conKey.interestOps() | SelectionKey.OP_READ);
         // schedule up the beginning of our handshaking by calling prepareNextWrite on the
         // writer thread pool
@@ -1834,9 +1859,9 @@ public class NTCPConnection implements Closeable {
             _paddingConfig = OUR_PADDING;
         }
         NTCPConnection toClose = _transport.inboundEstablished(this);
-        if (toClose != null) {
-            if (_log.shouldLog(Log.DEBUG))
-                _log.debug("Old connection closed: " + toClose + " replaced by " + this);
+        if (toClose != null && toClose != this) {
+            if (_log.shouldWarn())
+                _log.warn("Old connection closed: " + toClose + " replaced by " + this);
             _context.statManager().addRateData("ntcp.inboundEstablishedDuplicate", toClose.getUptime());
             toClose.close();
         }
@@ -2107,7 +2132,7 @@ public class NTCPConnection implements Closeable {
                     }
                 }
             } catch (IllegalArgumentException iae) {
-                throw new DataFormatException("RI store fail", iae);
+                throw new DataFormatException("RI store fail: " + ri, iae);
             }
         }
 

@@ -46,13 +46,24 @@ class SummaryRenderer {
     private static final Color AREA_COLOR = new Color(100, 160, 200, 200);
     private static final Color LINE_COLOR = new Color(0, 30, 110, 255);
     private static final Color RESTART_BAR_COLOR = new Color(223, 13, 13, 255);
-    private static final String DEFAULT_FONT_NAME = System.getProperty("os.name").toLowerCase().contains("windows") ?
+    private static final boolean IS_WIN = SystemVersion.isWindows();
+    private static final String DEFAULT_FONT_NAME = IS_WIN ?
             "Lucida Console" : "Monospaced";
+    private static final String DEFAULT_TITLE_FONT_NAME = "Dialog";
+    private static final String DEFAULT_LEGEND_FONT_NAME = "Dialog";
+    private static final String PROP_FONT_MONO = "routerconsole.graphFont.unit";
+    private static final String PROP_FONT_LEGEND = "routerconsole.graphFont.legend";
+    private static final String PROP_FONT_TITLE = "routerconsole.graphFont.title";
+    private static final int SIZE_MONO = 10;
+    private static final int SIZE_LEGEND = 10;
+    private static final int SIZE_TITLE = 13;
+    private static final long[] RATES = new long[] { 60*60*1000 };
 
     public SummaryRenderer(I2PAppContext ctx, SummaryListener lsnr) { 
         _log = ctx.logManager().getLog(SummaryRenderer.class);
         _listener = lsnr;
         _context = ctx;
+        ctx.statManager().createRateStat("graph.renderTime", "", "Router", RATES);
     }
     
     /**
@@ -90,7 +101,7 @@ class SummaryRenderer {
             ImageIO.write(img, "png", ios);
         } catch (RrdException re) {
             //_log.error("Error rendering " + filename, re);
-            throw new IOException("Error plotting: " + re.getMessage());
+            throw new IOException("Error plotting: " + re.getLocalizedMessage());
         } catch (IOException ioe) {
             //_log.error("Error rendering " + filename, ioe);
             throw ioe;
@@ -123,15 +134,15 @@ class SummaryRenderer {
     public void render(OutputStream out, int width, int height, boolean hideLegend, boolean hideGrid,
                        boolean hideTitle, boolean showEvents, int periodCount,
                        int endp, boolean showCredit, SummaryListener lsnr2, String titleOverride) throws IOException {
+        long begin = System.currentTimeMillis();
         // prevent NaNs if we are skewed ahead of system time
-        long end = Math.min(_listener.now(), System.currentTimeMillis()) - 75*1000;
+        long end = Math.min(_listener.now(), begin - 75*1000);
         long period = _listener.getRate().getPeriod();
         if (endp > 0)
             end -= period * endp;
         if (periodCount <= 0 || periodCount > _listener.getRows())
             periodCount = _listener.getRows();
         long start = end - (period * periodCount);
-        //long begin = System.currentTimeMillis();
         ImageOutputStream ios = null;
         try {
             RrdGraphDef def = new RrdGraphDef();
@@ -144,28 +155,30 @@ class SummaryRenderer {
             def.setColor(RrdGraphDef.COLOR_MGRID,  MGRID_COLOR);
             def.setColor(RrdGraphDef.COLOR_FONT,   FONT_COLOR);
             def.setColor(RrdGraphDef.COLOR_FRAME,  FRAME_COLOR);
-            def.setFont(RrdGraphDef.FONTTAG_DEFAULT, new Font(DEFAULT_FONT_NAME, Font.PLAIN, 10));
-            def.setFont(RrdGraphDef.FONTTAG_TITLE,   new Font(DEFAULT_FONT_NAME, Font.PLAIN, 10));
-            def.setFont(RrdGraphDef.FONTTAG_AXIS,    new Font("Droid Sans Mono", Font.PLAIN, 10));
-            def.setFont(RrdGraphDef.FONTTAG_UNIT,    new Font(DEFAULT_FONT_NAME, Font.PLAIN, 10));
-            def.setFont(RrdGraphDef.FONTTAG_LEGEND,  new Font("Droid Sans Mono", Font.PLAIN, 10));
 
             // improve text legibility
             String lang = Messages.getLanguage(_context);
-            Font small = def.getSmallFont();
-            Font large = def.getLargeFont();
-            if ("ar".equals(lang) || "jp".equals(lang) || ("zh".equals(lang) && !IS_WIN)) {
-                small = small.deriveFont(small.getSize2D() + 2.0f);
-                large = large.deriveFont(Font.PLAIN, large.getSize2D() + 3.0f);
-            } else {
-            //    small = small.deriveFont(small.getSize2D() + 1.0f);
-            // if specified font family is missing, jrobin will use fallback
-                  small = new Font("Droid Sans Mono", Font.PLAIN, 10);
-            //    large = large.deriveFont(large.getSize2D() + 1.0f);
-                  large = new Font("Droid Sans", Font.PLAIN, 13);
+            int smallSize = SIZE_MONO;
+            int legendSize = SIZE_LEGEND;
+            int largeSize = SIZE_TITLE;
+            if ("ar".equals(lang) || "ja".equals(lang) || ("zh".equals(lang) && !IS_WIN)) {
+                smallSize += 2;
+                legendSize += 2;
+                largeSize += 3;
             }
-            def.setSmallFont(small);
-            def.setLargeFont(large);
+            String ssmall = _context.getProperty(PROP_FONT_MONO, DEFAULT_FONT_NAME);
+            String slegend = _context.getProperty(PROP_FONT_LEGEND, DEFAULT_LEGEND_FONT_NAME);
+            String stitle = _context.getProperty(PROP_FONT_TITLE, DEFAULT_TITLE_FONT_NAME);
+            Font small = new Font(ssmall, Font.PLAIN, smallSize);
+            Font legnd = new Font(slegend, Font.PLAIN, legendSize);
+            Font large = new Font(stitle, Font.PLAIN, largeSize);
+            // DEFAULT is unused since we set all the others
+            def.setFont(RrdGraphDef.FONTTAG_DEFAULT, small);
+            // AXIS is unused, we do not set any axis labels
+            def.setFont(RrdGraphDef.FONTTAG_AXIS, small);
+            def.setFont(RrdGraphDef.FONTTAG_UNIT, small);
+            def.setFont(RrdGraphDef.FONTTAG_LEGEND, legnd);
+            def.setFont(RrdGraphDef.FONTTAG_TITLE, large);
 
             def.setTimeSpan(start/1000, end/1000);
             def.setMinValue(0d);
@@ -247,13 +260,14 @@ class SummaryRenderer {
                     long started = event.getKey().longValue();
                     if (started > start && started < end) {
                         // String legend = _t("Restart") + ' ' + sdf.format(new Date(started)) + " UTC " + event.getValue() + "\\l";
-                        if ("ar".equals(lang)) {
-                            String legend = _t("Restart") + ' ' + sdf.format(new Date(started)) + " - " + event.getValue() + "\\l";
-                            def.vrule(started / 1000, RESTART_BAR_COLOR, legend, 2.0f);
+                        String legend;
+                        if ("ar".equals(lang) || "fa".equals(lang) || "iw".equals(lang)) {
+                            // RTL languages
+                            legend = _t("Restart") + ' ' + sdf.format(new Date(started)) + " - " + event.getValue() + "\\l";
                         } else {
-                            String legend = _t("Restart") + ' ' + sdf.format(new Date(started)) + " [" + event.getValue() + "]\\l";
-                            def.vrule(started / 1000, RESTART_BAR_COLOR, legend, 2.0f);
+                            legend = _t("Restart") + ' ' + sdf.format(new Date(started)) + " [" + event.getValue() + "]\\l";
                         }
+                        def.vrule(started / 1000, RESTART_BAR_COLOR, legend, 2.0f);
                     }
                 }
                 def.comment(sdf.format(new Date(start)) + " — " + sdf.format(new Date(end)) + " UTC\\r");
@@ -289,7 +303,7 @@ class SummaryRenderer {
                 graph = new RrdGraph(def);
             } catch (NullPointerException npe) {
                 _log.error("Error rendering", npe);
-                StatSummarizer.setDisabled();
+                StatSummarizer.setDisabled(_context);
                 throw new IOException("Error rendering - disabling graph generation. Missing font? See http://trac.i2p2.i2p/ticket/915");
             }
             int totalWidth = graph.getRrdGraphInfo().getWidth();
@@ -299,15 +313,11 @@ class SummaryRenderer {
             graph.render(gfx);
             ios = new MemoryCacheImageOutputStream(out);
             ImageIO.write(img, "png", ios);
-            //System.out.println("Graph created");
 
-            //File t = File.createTempFile("jrobinData", ".xml");
-            //_listener.getData().dumpXml(new FileOutputStream(t));
-            //System.out.println("plotted: " + (data != null ? data.length : 0) + " bytes in " + timeToPlot
-            //                   ); // + ", data written to " + t.getAbsolutePath());
+            _context.statManager().addRateData("graph.renderTime", System.currentTimeMillis() - begin);
         } catch (RrdException re) {
             _log.error("Error rendering", re);
-            throw new IOException("Error plotting: " + re.getMessage());
+            throw new IOException("Error plotting: " + re.getLocalizedMessage());
         } catch (IOException ioe) {
             // typically org.mortbay.jetty.EofException extends java.io.EOFException
             if (_log.shouldLog(Log.WARN))
@@ -315,14 +325,12 @@ class SummaryRenderer {
             throw ioe;
         } catch (OutOfMemoryError oom) {
             _log.error("Error rendering", oom);
-            throw new IOException("Error plotting: " + oom.getMessage());
+            throw new IOException("Error plotting: " + oom.getLocalizedMessage());
         } finally {
             // this does not close the underlying stream
             if (ios != null) try {ios.close();} catch (IOException ioe) {}
         }
     }
-
-    private static final boolean IS_WIN = SystemVersion.isWindows();
 
     /** translate a string */
     private String _t(String s) {

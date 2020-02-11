@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import net.i2p.crypto.SigType;
 import net.i2p.data.DatabaseEntry;
 import net.i2p.data.Destination;
 import net.i2p.data.Hash;
@@ -137,8 +138,11 @@ public class FloodfillNetworkDatabaseFacade extends KademliaNetworkDatabaseFacad
         if (_context.router().isHidden()) return; // DE-nied!
         super.publish(localRouterInfo);
         // wait until we've read in the RI's so we can find the closest floodfill
-        if (!isInitialized())
+        if (!isInitialized()) {
+            if (_log.shouldWarn())
+                _log.warn("publish() before initialized: " + localRouterInfo, new Exception("I did it"));
             return;
+        }
         // no use sending if we have no addresses
         // (unless maybe we used to have addresses? not worth it
         if (localRouterInfo.getAddresses().isEmpty())
@@ -208,11 +212,24 @@ public class FloodfillNetworkDatabaseFacade extends KademliaNetworkDatabaseFacad
         RouterKeyGenerator gen = _context.routerKeyGenerator();
         Hash rkey = gen.getRoutingKey(key);
         FloodfillPeerSelector sel = (FloodfillPeerSelector)getPeerSelector();
-        List<Hash> peers = sel.selectFloodfillParticipants(rkey, MAX_TO_FLOOD, getKBuckets());
+        final int type = ds.getType();
+        final boolean isls = ds.isLeaseSet();
+        final boolean isls2 = isls && type != DatabaseEntry.KEY_TYPE_LEASESET;
+        final SigType lsSigType = (isls && type != DatabaseEntry.KEY_TYPE_ENCRYPTED_LS2) ?
+                                  ds.getKeysAndCert().getSigningPublicKey().getType() :
+                                  null;
+        int max = MAX_TO_FLOOD;
+        // increase candidates because we will be skipping some
+        if (type == DatabaseEntry.KEY_TYPE_ENCRYPTED_LS2)
+            max *= 4;
+        else if (isls2)
+            max *= 2;
+        List<Hash> peers = sel.selectFloodfillParticipants(rkey, max, getKBuckets());
+
         // todo key cert skip?
         long until = gen.getTimeTillMidnight();
         if (until < NEXT_RKEY_LS_ADVANCE_TIME ||
-            (ds.getType() == DatabaseEntry.KEY_TYPE_ROUTERINFO && until < NEXT_RKEY_RI_ADVANCE_TIME)) {
+            (type == DatabaseEntry.KEY_TYPE_ROUTERINFO && until < NEXT_RKEY_RI_ADVANCE_TIME)) {
             // to avoid lookup faulures after midnight, also flood to some closest to the
             // next routing key for a period of time before midnight.
             Hash nkey = gen.getNextRoutingKey(key);
@@ -229,23 +246,24 @@ public class FloodfillNetworkDatabaseFacade extends KademliaNetworkDatabaseFacad
                     peers.add(h);
                     i++;
                 }
+                if (i >= MAX_TO_FLOOD)
+                    break;
             }
-            if (i > 0 && _log.shouldLog(Log.INFO))
-                _log.info("Flooding the entry for " + key + " to " + i + " more, just before midnight");
+            if (i > 0) {
+                max += i;
+                if (_log.shouldInfo())
+                    _log.info("Flooding the entry for " + key + " to " + i + " more, just before midnight");
+            }
         }
         int flooded = 0;
         for (int i = 0; i < peers.size(); i++) {
             Hash peer = peers.get(i);
             RouterInfo target = lookupRouterInfoLocally(peer);
-            if ( (target == null) || (_context.banlist().isBanlisted(peer)) )
+            if (!shouldFloodTo(key, type, lsSigType, peer, target)) {
+                if (_log.shouldDebug())
+                    _log.debug("Too old, not flooding " + key.toBase64() + " to " + peer.toBase64());
                 continue;
-            // Don't flood an RI back to itself
-            // Not necessary, a ff will do its own flooding (reply token == 0)
-            // But other implementations may not...
-            if (ds.getType() == DatabaseEntry.KEY_TYPE_ROUTERINFO && peer.equals(key))
-                continue;
-            if (peer.equals(_context.routerHash()))
-                continue;
+            }
             DatabaseStoreMessage msg = new DatabaseStoreMessage(_context);
             msg.setEntry(ds);
             OutNetMessage m = new OutNetMessage(_context, msg, _context.clock().now()+FLOOD_TIMEOUT, FLOOD_PRIORITY, target);
@@ -259,10 +277,40 @@ public class FloodfillNetworkDatabaseFacade extends KademliaNetworkDatabaseFacad
             flooded++;
             if (_log.shouldLog(Log.INFO))
                 _log.info("Flooding the entry for " + key.toBase64() + " to " + peer.toBase64());
+            if (flooded >= MAX_TO_FLOOD)
+                break;
         }
         
         if (_log.shouldLog(Log.INFO))
             _log.info("Flooded the data to " + flooded + " of " + peers.size() + " peers");
+    }
+
+    /**
+     *  @param type database store type
+     *  @param lsSigType may be null
+     *  @since 0.9.39
+     */
+    private boolean shouldFloodTo(Hash key, int type, SigType lsSigType, Hash peer, RouterInfo target) {
+       if ( (target == null) || (_context.banlist().isBanlisted(peer)) )
+           return false;
+       // Don't flood an RI back to itself
+       // Not necessary, a ff will do its own flooding (reply token == 0)
+       // But other implementations may not...
+       if (type == DatabaseEntry.KEY_TYPE_ROUTERINFO && peer.equals(key))
+           return false;
+       if (peer.equals(_context.routerHash()))
+           return false;
+       // min version checks
+       if (type != DatabaseEntry.KEY_TYPE_ROUTERINFO && type != DatabaseEntry.KEY_TYPE_LEASESET &&
+           !StoreJob.shouldStoreLS2To(target))
+           return false;
+       if ((type == DatabaseEntry.KEY_TYPE_ENCRYPTED_LS2 ||
+            lsSigType == SigType.RedDSA_SHA512_Ed25519) &&
+           !StoreJob.shouldStoreEncLS2To(target))
+           return false;
+       if (!StoreJob.shouldStoreTo(target))
+           return false;
+        return true;
     }
 
     /** note in the profile that the store failed */
@@ -521,8 +569,8 @@ public class FloodfillNetworkDatabaseFacade extends KademliaNetworkDatabaseFacad
             (getKBucketSetSize() < MIN_REMAINING_ROUTERS ||
              _context.router().getUptime() < DONT_FAIL_PERIOD ||
              _context.commSystem().countActivePeers() <= MIN_ACTIVE_PEERS)) {
-            if (_log.shouldLog(Log.WARN))
-                _log.warn("Not failing " + peer.toBase64() + " as we are just starting up or have problems");
+            if (_log.shouldInfo())
+                _log.info("Not failing " + peer.toBase64() + " as we are just starting up or have problems");
             return;
         }
 

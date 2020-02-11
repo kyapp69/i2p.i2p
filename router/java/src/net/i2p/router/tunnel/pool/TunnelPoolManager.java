@@ -10,11 +10,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
+import net.i2p.crypto.EncType;
 import net.i2p.data.Destination;
 import net.i2p.data.Hash;
 import net.i2p.data.TunnelId;
 import net.i2p.router.ClientTunnelSettings;
 import net.i2p.router.JobImpl;
+import net.i2p.router.LeaseSetKeys;
 import net.i2p.router.RouterContext;
 import net.i2p.router.TunnelInfo;
 import net.i2p.router.TunnelManagerFacade;
@@ -129,7 +131,7 @@ public class TunnelPoolManager implements TunnelManagerFacade {
         }
         if (_log.shouldLog(Log.ERROR))
             _log.error("Want the inbound tunnel for " + destination.toBase32() +
-                     " but there isn't a pool?");
+                     " but there isn't a pool?", new Exception());
         return null;
     }
 
@@ -205,7 +207,7 @@ public class TunnelPoolManager implements TunnelManagerFacade {
         }
         if (_log.shouldLog(Log.ERROR))
             _log.error("Want the inbound tunnel for " + destination.toBase32() +
-                     " but there isn't a pool?");
+                     " but there isn't a pool?", new Exception());
         return null;
     }
 
@@ -560,27 +562,13 @@ public class TunnelPoolManager implements TunnelManagerFacade {
             (!_context.getBooleanPropertyDefaultTrue("router.disableTunnelTesting") ||
              _context.router().isHidden() ||
              _context.router().getRouterInfo().getAddressCount() <= 0)) {
-            TunnelPool pool = cfg.getTunnelPool();
-            if (pool == null) {
-                // never seen this before, do we reallly need to bother
-                // trying so hard to find his pool?
-                _log.error("How does this not have a pool?  " + cfg, new Exception("baf"));
-                if (cfg.getDestination() != null) {
-                    if (cfg.isInbound()) {
-                            pool = _clientInboundPools.get(cfg.getDestination());
-                    } else {
-                            pool = _clientOutboundPools.get(cfg.getDestination());
-                    }
-                } else {
-                    if (cfg.isInbound()) {
-                        pool = _inboundExploratory;
-                    } else {
-                        pool = _outboundExploratory;
-                    }
-                }
-                cfg.setTunnelPool(pool);
+            Hash client = cfg.getDestination();
+            LeaseSetKeys lsk = client != null ? _context.keyManager().getKeys(client) : null;
+            if (lsk == null || lsk.isSupported(EncType.ELGAMAL_2048)) {
+                TunnelPool pool = cfg.getTunnelPool();
+                _context.jobQueue().addJob(new TestJob(_context, cfg, pool));
             }
-            _context.jobQueue().addJob(new TestJob(_context, cfg, pool));
+            // else we don't yet have any way to request/get a ECIES-tagged reply,
         }
     }
 
@@ -605,11 +593,11 @@ public class TunnelPoolManager implements TunnelManagerFacade {
     }
 
     private static class BootstrapPool extends JobImpl {
-        private TunnelPool _pool;
+        private final TunnelPool _pool;
         public BootstrapPool(RouterContext ctx, TunnelPool pool) {
             super(ctx);
             _pool = pool;
-            getTiming().setStartAfter(ctx.clock().now() + 30*1000);
+            getTiming().setStartAfter(ctx.clock().now() + 5*1000);
         }
         public String getName() { return "Bootstrap tunnel pool"; }
         public void runJob() {

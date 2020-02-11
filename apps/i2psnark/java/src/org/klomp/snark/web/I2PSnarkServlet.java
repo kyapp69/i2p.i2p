@@ -7,13 +7,11 @@ import java.io.Serializable;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.text.DecimalFormat;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
@@ -237,6 +235,18 @@ public class I2PSnarkServlet extends BasicServlet {
                 File resource = getResource(pathInContext);
                 if (resource == null) {
                     resp.sendError(404);
+                } else if (req.getParameter("playlist") != null) {
+                    String base = addPaths(req.getRequestURI(), "/");
+                    String listing = getPlaylist(req.getRequestURL().toString(), base, req.getParameter("sort"));
+                    if (listing != null) {
+                        setHTMLHeaders(resp);
+                        // TODO custom name
+                        resp.setContentType("audio/mpegurl; charset=UTF-8; name=\"playlist.m3u\"");
+                        resp.addHeader("Content-Disposition", "attachment; filename=\"playlist.m3u\"");
+                        resp.getWriter().write(listing);
+                    } else {
+                        resp.sendError(404);
+                    }
                 } else {
                     String base = addPaths(req.getRequestURI(), "/");
                     String listing = getListHTML(resource, base, true, method.equals("POST") ? req.getParameterMap() : null,
@@ -404,7 +414,7 @@ public class I2PSnarkServlet extends BasicServlet {
         resp.setContentType("text/html; charset=UTF-8");
         // "no-store, max-age=0" forces all our images to be reloaded on ajax refresh
         resp.setHeader("Cache-Control", "max-age=86400, no-cache, must-revalidate");
-        resp.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'");
+        resp.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'self'; object-src 'none'");
         resp.setDateHeader("Expires", 86400);
         resp.setHeader("Pragma", "no-cache");
         resp.setHeader("X-Frame-Options", "SAMEORIGIN");
@@ -1803,11 +1813,8 @@ public class I2PSnarkServlet extends BasicServlet {
             out.write(formatSize(total-remaining) + thinsp(noThinsp) + formatSize(total));
             out.write("</div></div></div>");
         } else if (remaining == 0) {
-            // needs locale configured for automatic translation
-            SimpleDateFormat fmt = new SimpleDateFormat("HH:mm, EEE dd MMM yyyy");
-            fmt.setTimeZone(SystemVersion.getSystemTimeZone(_context));
             long[] dates = _manager.getSavedAddedAndCompleted(snark);
-            String date = fmt.format(new Date(dates[1]));
+            String date = DataHelper.formatTime(dates[1]);
             out.write("<div class=\"percentBarComplete\" title=\"");
             out.write(_t("Completed") + ": " + date + "\">");
             out.write(formatSize(total)); // 3GB
@@ -2869,7 +2876,7 @@ public class I2PSnarkServlet extends BasicServlet {
     private static final String TABLE_HEADER = "<table border=\"0\" class=\"snarkTorrents\" width=\"100%\" >\n" +
                                                "<thead>\n";
 
-    private static final String FOOTER = "</div></center>\n</body>\n</html>";
+    private static final String FOOTER = "</div></center></body></html>";
 
 
     /**
@@ -3025,7 +3032,7 @@ public class I2PSnarkServlet extends BasicServlet {
             buf.append("<table class=\"snarkTorrentInfo\">\n" +
                        "<tr><th></th><th><b>")
                .append(_t("Torrent"))
-               .append(":</b> ")
+               .append("</b></th><th>")
                .append(DataHelper.escapeHTML(snark.getBaseName()))
                .append("</th></tr>\n");
 
@@ -3035,7 +3042,7 @@ public class I2PSnarkServlet extends BasicServlet {
             toThemeImg(buf, "file");
             buf.append("</td><td><b>")
                .append(_t("Torrent file"))
-               .append(":</b> <a href=\"").append(_contextPath).append('/').append(baseName).append("\">")
+               .append("</b></td><td><a href=\"").append(_contextPath).append('/').append(baseName).append("\">")
                .append(DataHelper.escapeHTML(fullPath))
                .append("</a></td></tr>\n");
             if (storage != null) {
@@ -3043,7 +3050,7 @@ public class I2PSnarkServlet extends BasicServlet {
                 toThemeImg(buf, "file");
                 buf.append("</td><td><b>")
                    .append(_t("Data location"))
-                   .append(":</b> ")
+                   .append("</b></td><td>")
                    .append(DataHelper.escapeHTML(storage.getBase().getPath()))
                    .append("</td></tr>\n");
             }
@@ -3052,7 +3059,7 @@ public class I2PSnarkServlet extends BasicServlet {
             toThemeImg(buf, "details");
             buf.append("</td><td><b>")
                .append(_t("Info hash"))
-               .append(":</b> <span id=\"infohash\">")
+               .append("</b></td><td><span id=\"infohash\">")
                .append(hex.toUpperCase(Locale.US))
                .append("</span></td></tr>\n");
 
@@ -3066,7 +3073,7 @@ public class I2PSnarkServlet extends BasicServlet {
                     announce = DataHelper.stripHTML(announce);
                     buf.append("<tr><td>");
                     toThemeImg(buf, "details");
-                    buf.append("</td><td><b>").append(_t("Primary Tracker")).append(":</b> <span class=\"info_tracker\">");
+                    buf.append("</td><td><b>").append(_t("Primary Tracker")).append("</b></td><td><span class=\"info_tracker\">");
                     buf.append(getShortTrackerLink(announce, snark.getInfoHash()));
                     buf.append("</span></td></tr>");
                 }
@@ -3075,7 +3082,7 @@ public class I2PSnarkServlet extends BasicServlet {
                     buf.append("<tr><td>");
                     toThemeImg(buf, "details");
                     buf.append("</td><td><b>")
-                       .append(_t("Tracker List")).append(":</b> ");
+                       .append(_t("Tracker List")).append("</b></td><td>");
                     for (List<String> alist2 : alist) {
                         buf.append("<span class=\"info_tracker\">");
                         boolean more = false;
@@ -3100,20 +3107,17 @@ public class I2PSnarkServlet extends BasicServlet {
                     buf.append("<tr><td>");
                     toThemeImg(buf, "details");
                     buf.append("</td><td><b>")
-                       .append(_t("Comment")).append(":</b> ")
+                       .append(_t("Comment")).append("</b></td><td>")
                        .append(DataHelper.stripHTML(com))
                        .append("</td></tr>\n");
                 }
                 long dat = meta.getCreationDate();
-                // needs locale configured for automatic translation
-                SimpleDateFormat fmt = new SimpleDateFormat("HH:mm, EEEE dd MMMM yyyy");
-                fmt.setTimeZone(SystemVersion.getSystemTimeZone(_context));
                 if (dat > 0) {
-                    String date = fmt.format(new Date(dat));
+                    String date = DataHelper.formatTime(dat);
                     buf.append("<tr><td>");
                     toThemeImg(buf, "details");
                     buf.append("</td><td><b>")
-                       .append(_t("Created")).append(":</b> ")
+                       .append(_t("Created")).append("</b></td><td>")
                        .append(date)
                        .append("</td></tr>\n");
                 }
@@ -3124,28 +3128,40 @@ public class I2PSnarkServlet extends BasicServlet {
                     buf.append("<tr><td>");
                     toThemeImg(buf, "details");
                     buf.append("</td><td><b>")
-                       .append(_t("Created By")).append(":</b> ")
+                       .append(_t("Created By")).append("</b></td><td>")
                        .append(DataHelper.stripHTML(cby))
                        .append("</td></tr>\n");
                 }
                 long[] dates = _manager.getSavedAddedAndCompleted(snark);
                 if (dates[0] > 0) {
-                    String date = fmt.format(new Date(dates[0]));
+                    String date = DataHelper.formatTime(dates[0]);
                     buf.append("<tr><td>");
                     toThemeImg(buf, "details");
                     buf.append("</td><td><b>")
-                       .append(_t("Added")).append(":</b> ")
+                       .append(_t("Added")).append("</b></td><td>")
                        .append(date)
                        .append("</td></tr>\n");
                 }
                 if (dates[1] > 0) {
-                    String date = fmt.format(new Date(dates[1]));
+                    String date = DataHelper.formatTime(dates[1]);
                     buf.append("<tr><td>");
                     toThemeImg(buf, "details");
                     buf.append("</td><td><b>")
-                       .append(_t("Completed")).append(":</b> ")
+                       .append(_t("Completed")).append("</b></td><td>")
                        .append(date)
                        .append("</td></tr>\n");
+                }
+                if (storage != null) {
+                    dat = storage.getActivity();
+                    if (dat > 0) {
+                        String date = DataHelper.formatTime(dat);
+                        buf.append("<tr><td>");
+                        toThemeImg(buf, "details");
+                        buf.append("</td><td><b>")
+                           .append(_t("Last activity")).append("</b></td><td>")
+                           .append(date)
+                           .append("</td></tr>\n");
+                    }
                 }
             }
 
@@ -3156,7 +3172,7 @@ public class I2PSnarkServlet extends BasicServlet {
                     buf.append("&amp;tr=").append(announce);
                 buf.append("\">")
                    .append(toImg("magnet", _t("Magnet link")))
-                   .append("</a></td><td><b>Magnet:</b> <a href=\"")
+                   .append("</a></td><td><b>Magnet</b></td><td><a href=\"")
                    .append(MagnetURI.MAGNET_FULL).append(hex);
                 if (announce != null)
                     buf.append("&amp;tr=").append(announce);
@@ -3178,26 +3194,25 @@ public class I2PSnarkServlet extends BasicServlet {
             //buf.append("<tr><td>").append(_t("Maggot link")).append(": <a href=\"").append(MAGGOT).append(hex).append(':').append(hex).append("\">")
             //   .append(MAGGOT).append(hex).append(':').append(hex).append("</a></td></tr>");
 
-            buf.append("<tr id=\"torrentInfoStats\"><td colspan=\"2\"><span>");
-            toThemeImg(buf, "size");
-            buf.append("<b>")
-               .append(_t("Size"))
-               .append(":</b> ")
-               .append(formatSize(snark.getTotalLength()));
+            buf.append("<tr id=\"torrentInfoStats\"><td>");
+            toThemeImg(buf, "head_rx");
+            buf.append("</td><td><b>");
             int pieces = snark.getPieces();
             double completion = (pieces - snark.getNeeded()) / (double) pieces;
-            buf.append("</span>&nbsp;<span>");
-            toThemeImg(buf, "head_rx");
-            buf.append("<b>");
             if (completion < 1.0)
                 buf.append(_t("Completion"))
                    .append(":</b> ")
                    .append((new DecimalFormat("0.00%")).format(completion));
             else
                 buf.append(_t("Complete")).append("</b>");
+            buf.append("</td><td><span>");
+            buf.append("<b>")
+               .append(_t("Size"))
+               .append(":</b> ")
+               .append(formatSize(snark.getTotalLength()));
+            buf.append("</span>&nbsp;<span>");
             // up ratio
             buf.append("</span>&nbsp;<span>");
-            toThemeImg(buf, "head_tx");
             buf.append("<b>")
                .append(_t("Upload ratio"))
                .append(":</b> ");
@@ -3217,7 +3232,6 @@ public class I2PSnarkServlet extends BasicServlet {
             }
             if (needed > 0) {
                 buf.append("</span>&nbsp;<span>");
-                toThemeImg(buf, "head_rx");
                 buf.append("<b>")
                    .append(_t("Remaining"))
                    .append(":</b> ")
@@ -3226,7 +3240,6 @@ public class I2PSnarkServlet extends BasicServlet {
             long skipped = snark.getSkippedLength();
             if (skipped > 0) {
                 buf.append("</span>&nbsp;<span>");
-                toThemeImg(buf, "head_rx");
                 buf.append("<b>")
                    .append(_t("Skipped"))
                    .append(":</b> ")
@@ -3236,20 +3249,17 @@ public class I2PSnarkServlet extends BasicServlet {
                 List<List<String>> files = meta.getFiles();
                 int fileCount = files != null ? files.size() : 1;
                 buf.append("</span>&nbsp;<span>");
-                toThemeImg(buf, "file");
                 buf.append("<b>")
                    .append(_t("Files"))
                    .append(":</b> ")
                    .append(fileCount);
             }
             buf.append("</span>&nbsp;<span>");
-            toThemeImg(buf, "file");
             buf.append("<b>")
                .append(_t("Pieces"))
                .append(":</b> ")
                .append(pieces);
             buf.append("</span>&nbsp;<span>");
-            toThemeImg(buf, "file");
             buf.append("<b>")
                .append(_t("Piece size"))
                .append(":</b> ")
@@ -3258,7 +3268,7 @@ public class I2PSnarkServlet extends BasicServlet {
 
             // buttons
             if (showStopStart) {
-                buf.append("<tr id=\"torrentInfoControl\"><td colspan=\"2\">");
+                buf.append("<tr id=\"torrentInfoControl\"><td colspan=\"3\">");
                 if (snark.isChecking()) {
                     buf.append("<span id=\"fileCheck\"><b>").append(_t("Checking")).append("&hellip; ")
                        .append((new DecimalFormat("0.00%")).format(snark.getCheckingProgress()))
@@ -3289,7 +3299,7 @@ public class I2PSnarkServlet extends BasicServlet {
                                       meta != null;
                 if (showInOrder) {
                     buf.append("</td></tr>\n" +
-                               "<tr id=\"torrentOrderControl\"><td colspan=\"2\">");
+                               "<tr id=\"torrentOrderControl\"><td colspan=\"3\">");
                     String txt = (meta.getFiles() != null && meta.getFiles().size() > 1) ?
                                  _t("Download files in order") :
                                  _t("Download pieces in order");
@@ -3324,7 +3334,7 @@ public class I2PSnarkServlet extends BasicServlet {
                .append("</th></tr><tr><td><b>").append(_t("Resource")).append(":</b></td><td>").append(r.toString())
                .append("</td></tr><tr><td><b>").append(_t("Base")).append(":</b></td><td>").append(base)
                .append("</td></tr><tr><td><b>").append(_t("Torrent")).append(":</b></td><td>").append(DataHelper.escapeHTML(torrentName))
-               .append("</td></tr></table></div></div></center>\n</body>\n</html>");
+               .append("</td></tr></table></div></div></center></body></html>");
             return buf.toString();
         }
 
@@ -3335,19 +3345,41 @@ public class I2PSnarkServlet extends BasicServlet {
 
         if (ls == null) {
             // We are only showing the torrent info section
+            // unless audio or video...
+            if (storage != null && storage.complete()) {
+                String mime = getMimeType(r.getName());
+                boolean isAudio = mime != null && isAudio(mime);
+                boolean isVideo = !isAudio && mime != null && isVideo(mime);
+                if (isAudio || isVideo) {
+                    // HTML5
+                    if (isAudio)
+                        buf.append("<audio");
+                    else
+                        buf.append("<video");
+                    // strip trailing slash
+                    String path = base.substring(0, base.length() - 1);
+                    buf.append(" controls><source src=\"").append(path).append("\" type=\"").append(mime).append("\">");
+                    if (isAudio)
+                        buf.append("</audio>");
+                    else
+                        buf.append("</video>");
+                }
+            }
             if (er || ec)
                 displayComments(snark, er, ec, esc, buf);
             if (includeForm)
                 buf.append("</form>");
-            buf.append("</div></div>\n</body>\n</html>");
+            buf.append("</div></div></body></html>");
             return buf.toString();
         }
 
         List<Sorters.FileAndIndex> fileList = new ArrayList<Sorters.FileAndIndex>(ls.length);
         // precompute remaining for all files for efficiency
-        long[] remainingArray = (storage != null) ? storage.remaining() : null;
+        long[][] arrays = (storage != null) ? storage.remaining() : null;
+        long[] remainingArray = (arrays != null) ? arrays[0] : null;
+        long[] previewArray = (arrays != null) ? arrays[1] : null;
         for (int i = 0; i < ls.length; i++) {
-            fileList.add(new Sorters.FileAndIndex(ls[i], storage, remainingArray));
+            fileList.add(new Sorters.FileAndIndex(ls[i], storage, remainingArray, previewArray));
         }
 
         boolean showSort = fileList.size() > 1;
@@ -3358,7 +3390,7 @@ public class I2PSnarkServlet extends BasicServlet {
                     sort = Integer.parseInt(sortParam);
                 } catch (NumberFormatException nfe) {}
             }
-            Collections.sort(fileList, Sorters.getFileComparator(sort, this));
+            DataHelper.sort(fileList, Sorters.getFileComparator(sort, this));
         }
 
         // second table - dir info
@@ -3438,9 +3470,17 @@ public class I2PSnarkServlet extends BasicServlet {
            .append(_t("Up to higher level directory"))
            .append("</A></td></tr>\n");
 
+        // playlist button
+        if (hasCompleteAudio(fileList, storage, remainingArray)) {
+            buf.append("<tr><td colspan=\"" + (showPriority ? '5' : '4') + "\" class=\"ParentDir\">" +
+                       "<a href=\"").append(base).append("?playlist");
+            if (sortParam != null && !"0".equals(sortParam) && !"1".equals(sortParam))
+                buf.append("&amp;sort=").append(sortParam);
+            buf.append("\">");
+            buf.append(toImg("music"));
+            buf.append(' ').append(_t("Audio Playlist")).append("</a></td></tr>\n");
+        }
 
-        //DateFormat dfmt=DateFormat.getDateTimeInstance(DateFormat.MEDIUM,
-        //                                               DateFormat.MEDIUM);
         boolean showSaveButton = false;
         boolean rowEven = true;
         boolean inOrder = storage != null && storage.getInOrder();
@@ -3508,17 +3548,37 @@ public class I2PSnarkServlet extends BasicServlet {
             if (mime == null)
                 mime = "";
 
+            boolean isAudio = isAudio(mime);
+            boolean isVideo = !isAudio && isVideo(mime);
             buf.append("<td class=\"snarkFileIcon\">");
-            if (complete) {
-                buf.append("<a href=\"").append(path).append("\">");
-                // thumbnail ?
-                String plc = item.toString().toLowerCase(Locale.US);
+            String preview = null;
+            if (complete || (isAudio && fai.preview > 1024*100) || (isVideo && fai.preview > 1024*1024)) {
+                String ppath = complete ? path : path + "?limit=" + fai.preview;
+                if (!complete) {
+                    double pct = fai.preview / (double) fai.length;
+                    preview = "<br>" + _t("Preview") + ": " +
+                              (new DecimalFormat("0.00%")).format(pct);
+                }
+                if (isAudio || isVideo) {
+                    // HTML5
+                    if (isAudio)
+                        buf.append("<audio");
+                    else
+                        buf.append("<video");
+                    buf.append(" controls><source src=\"").append(ppath).append("\" type=\"").append(mime).append("\">");
+                }
+                buf.append("<a href=\"").append(ppath).append("\">");
                 if (mime.startsWith("image/")) {
+                    // thumbnail
                     buf.append("<img alt=\"\" border=\"0\" class=\"thumb\" src=\"")
-                       .append(path).append("\"></a>");
+                       .append(ppath).append("\"></a>");
                 } else {
                     buf.append(toImg(icon, _t("Open"))).append("</a>");
                 }
+                if (isAudio)
+                    buf.append("</audio>");
+                else if (isVideo)
+                    buf.append("</video>");
             } else {
                 buf.append(toImg(icon));
             }
@@ -3526,22 +3586,21 @@ public class I2PSnarkServlet extends BasicServlet {
             if (complete) {
                 buf.append("<a href=\"").append(path);
                 // send browser-viewable files to new tab to avoid potential display in iframe
-                if (mime.startsWith("text/") ||
-                    mime.startsWith("image/") ||
-                    mime.startsWith("audio/") ||
-                    mime.startsWith("video/") ||
-                    mime.equals("application/ogg"))
+                if (isAudio || isVideo ||
+                    mime.startsWith("text/") ||
+                    mime.startsWith("image/"))
                     buf.append("\" target=\"_blank");
                 buf.append("\">");
             }
             buf.append(DataHelper.escapeHTML(item.getName()));
             if (complete)
                 buf.append("</a>");
+            if (preview != null)
+                buf.append(preview);
             buf.append("</td><td align=right class=\"snarkFileSize\">");
             if (!item.isDirectory())
                 buf.append(formatSize(length));
             buf.append("</td><td class=\"snarkFileStatus\">");
-            //buf.append(dfmt.format(new Date(item.lastModified())));
             buf.append(status);
             buf.append("</td>");
             if (showPriority) {
@@ -3596,9 +3655,175 @@ public class I2PSnarkServlet extends BasicServlet {
         // for stop/start/check
         if (includeForm)
             buf.append("</form>");
-        buf.append("</div></div>\n</body>\n</html>\n");
+        buf.append("</div></div></body></html>");
 
         return buf.toString();
+    }
+
+    /**
+     * @param mime non-null
+     * @since 0.9.44
+     */
+    private static boolean isAudio(String mime) {
+        // don't include playlist files as the browser doesn't support them
+        // in the HTML5 player,
+        // and if it did and prefetched, that could be a security issue
+        return (mime.startsWith("audio/") &&
+                !mime.equals("audio/mpegurl") &&
+                !mime.equals("audio/x-scpls")) ||
+               mime.equals("application/ogg");
+    }
+
+    /**
+     * @param mime non-null
+     * @since 0.9.44
+     */
+    private static boolean isVideo(String mime) {
+        return mime.startsWith("video/") &&
+               !mime.equals("video/x-msvideo") &&
+               !mime.equals("video/x-matroska") &&
+               !mime.equals("video/quicktime") &&
+               !mime.equals("video/x-flv");
+    }
+
+    /**
+     * Is there at least one complete audio file in this directory or below?
+     * Recursive.
+     *
+     * @since 0.9.44
+     */
+    private boolean hasCompleteAudio(List<Sorters.FileAndIndex> fileList,
+                                     Storage storage, long[] remainingArray) {
+        for (Sorters.FileAndIndex fai : fileList) {
+            if (fai.isDirectory) {
+                // recurse
+                File[] ls = fai.file.listFiles();
+                if (ls != null && ls.length > 0) {
+                    List<Sorters.FileAndIndex> fl2 = new ArrayList<Sorters.FileAndIndex>(ls.length);
+                    for (int i = 0; i < ls.length; i++) {
+                         fl2.add(new Sorters.FileAndIndex(ls[i], storage, remainingArray));
+                    }
+                    if (hasCompleteAudio(fl2, storage, remainingArray))
+                        return true;
+                }
+                continue;
+            }
+            if (fai.remaining != 0)
+                continue;
+            String name = fai.file.getName();
+            String mime = getMimeType(name);
+            if (mime != null && isAudio(mime))
+                return true;
+        }
+        return false;
+    }
+
+    /**
+     * Get the audio files in the resource list as a m3u playlist.
+     * https://en.wikipedia.org/wiki/M3U
+     *
+     * @param base The encoded base URL
+     * @param sortParam may be null
+     * @return String of HTML or null if no files or on error
+     * @since 0.9.44
+     */
+    private String getPlaylist(String reqURL, String base, String sortParam) throws IOException {
+        String decodedBase = decodePath(base);
+        String title = decodedBase;
+        String cpath = _contextPath + '/';
+        if (title.startsWith(cpath))
+            title = title.substring(cpath.length());
+
+        // Get the snark associated with this directory
+        String torrentName;
+        String pathInTorrent;
+        int slash = title.indexOf('/');
+        if (slash > 0) {
+            torrentName = title.substring(0, slash);
+            pathInTorrent = title.substring(slash);
+        } else {
+            torrentName = title;
+            pathInTorrent = "/";
+        }
+        Snark snark = _manager.getTorrentByBaseName(torrentName);
+        if (snark == null)
+            return null;
+        Storage storage = snark.getStorage();
+        if (storage == null)
+            return null;
+        File sbase = storage.getBase();
+        File r;
+        if (pathInTorrent.equals("/"))
+            r = sbase;
+        else
+            r = new File(sbase, pathInTorrent);
+        if (!r.isDirectory())
+            return null;
+        File[] ls = r.listFiles();
+        if (ls == null)
+            return null;
+        List<Sorters.FileAndIndex> fileList = new ArrayList<Sorters.FileAndIndex>(ls.length);
+        // precompute remaining for all files for efficiency
+        long[] remainingArray = (storage != null) ? storage.remaining()[0] : null;
+        for (int i = 0; i < ls.length; i++) {
+            fileList.add(new Sorters.FileAndIndex(ls[i], storage, remainingArray));
+        }
+
+        boolean showSort = fileList.size() > 1;
+        int sort = 0;
+        if (showSort) {
+            if (sortParam != null) {
+                try {
+                    sort = Integer.parseInt(sortParam);
+                } catch (NumberFormatException nfe) {}
+            }
+            DataHelper.sort(fileList, Sorters.getFileComparator(sort, this));
+        }
+        StringBuilder buf = new StringBuilder(512);
+        getPlaylist(buf, fileList, reqURL, sort, storage, remainingArray);
+        String rv = buf.toString();
+        if (rv.length() <= 0)
+            return null;
+        return rv;
+    }
+
+    /**
+     * Append playlist entries in m3u format to buf.
+     * Recursive.
+     *
+     * @param buf out parameter
+     * @param reqURL encoded, WITH trailing slash
+     * @since 0.9.44
+     */
+    private void getPlaylist(StringBuilder buf, List<Sorters.FileAndIndex> fileList,
+                             String reqURL, int sort,
+                             Storage storage, long[] remainingArray) {
+        for (Sorters.FileAndIndex fai : fileList) {
+            if (fai.isDirectory) {
+                // recurse
+                File[] ls = fai.file.listFiles();
+                if (ls != null && ls.length > 0) {
+                    List<Sorters.FileAndIndex> fl2 = new ArrayList<Sorters.FileAndIndex>(ls.length);
+                    for (int i = 0; i < ls.length; i++) {
+                         fl2.add(new Sorters.FileAndIndex(ls[i], storage, remainingArray));
+                    }
+                    if (ls.length > 1)
+                        DataHelper.sort(fl2, Sorters.getFileComparator(sort, this));
+                    String name = fai.file.getName();
+                    String url2 = reqURL + encodePath(name) + '/';
+                    getPlaylist(buf, fl2, url2, sort, storage, remainingArray);
+                }
+                continue;
+            }
+            if (fai.remaining != 0)
+                continue;
+            String name = fai.file.getName();
+            String mime = getMimeType(name);
+            if (mime != null && isAudio(mime)) {
+                // TODO Extended M3U
+                buf.append(reqURL).append(encodePath(name)).append('\n');
+            }
+        }
     }
 
     /**
@@ -3728,8 +3953,6 @@ public class I2PSnarkServlet extends BasicServlet {
             // existing ratings / comments table
             int ccount = 0;
             if (iter != null) {
-                SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm");
-                fmt.setTimeZone(SystemVersion.getSystemTimeZone(_context));
                 buf.append("<table class=\"snarkComments\">");
 
                 while (iter.hasNext()) {
@@ -3754,7 +3977,7 @@ public class I2PSnarkServlet extends BasicServlet {
                             }
                         }
                     }
-                    buf.append("</td><td class=\"commentDate\">").append(fmt.format(new Date(c.getTime())));
+                    buf.append("</td><td class=\"commentDate\">").append(DataHelper.formatTime(c.getTime()));
                     buf.append("</td><td class=\"commentText\">");
                     if (esc) {
                         if (c.getText() != null) {
@@ -3825,11 +4048,13 @@ public class I2PSnarkServlet extends BasicServlet {
             icon = "html";
         else if (mime.equals("text/plain") ||
                  mime.equals("text/x-sfv") ||
-                 mime.equals("application/rtf") ||
-                 plc.endsWith(".azw4"))
+                 mime.equals("application/rtf"))
             icon = "page";
         else if  (mime.equals("application/epub+zip") ||
-                 mime.equals("application/x-mobipocket-ebook"))
+                 mime.equals("application/x-mobipocket-ebook") ||
+                 plc.endsWith(".fb2") ||
+                 plc.endsWith(".azw3") ||
+                 plc.endsWith(".azw4"))
             icon = "ebook";
         else if (mime.equals("application/java-archive") ||
                  plc.endsWith(".deb"))
@@ -4006,7 +4231,7 @@ public class I2PSnarkServlet extends BasicServlet {
         // check for user agents that can't toggle the collapsible panels...
         String ua = req.getHeader("user-agent");
         return ua != null && (ua.contains("Konq") || ua.contains("konq") ||
-                              ua.contains("Qupzilla") || ua.contains("Dillo") ||
+                              ua.contains("QupZilla") || ua.contains("Dillo") ||
                               ua.contains("Netsurf") || ua.contains("Midori"));
     }
 

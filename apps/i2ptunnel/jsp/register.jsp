@@ -1,13 +1,4 @@
-<%
-    // NOTE: Do the header carefully so there is no whitespace before the <?xml... line
-
-    response.setHeader("X-Frame-Options", "SAMEORIGIN");
-    response.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'");
-    response.setHeader("X-XSS-Protection", "1; mode=block");
-    response.setHeader("X-Content-Type-Options", "nosniff");
-    response.setHeader("Referrer-Policy", "no-referrer");
-    response.setHeader("Accept-Ranges", "none");
-
+<%@include file="headers.jsi"
 %><%@page pageEncoding="UTF-8"
 %><%@page contentType="text/html" import="java.io.InputStream,net.i2p.i2ptunnel.web.EditBean,net.i2p.servlet.RequestWrapper,net.i2p.client.I2PSessionException,net.i2p.client.naming.HostTxtEntry,net.i2p.data.PrivateKeyFile,net.i2p.data.SigningPrivateKey,net.i2p.util.OrderedProperties"
 %><%@page
@@ -78,7 +69,14 @@ input.default { width: 1px; height: 1px; visibility: hidden; }
                 <input type="hidden" name="type" value="<%=tunnelType%>" />
                 <input type="submit" class="default" name="action" value="Save changes" />
 <%
-    if (!"new".equals(tunnelType)) {
+    String curEncryptMode = editBean.getEncryptMode(curTunnel);
+    if (!"0".equals(curEncryptMode)) {
+%>
+      <table><tr><td class="infohelp">
+        <%=intl._t("This service uses encrypted leasesets. Registration is not recommended. Registration authentication is disabled.")%>
+      </td></tr>
+<%
+    } else if (!"new".equals(tunnelType)) {
 %>
 
 <table>
@@ -127,6 +125,8 @@ input.default { width: 1px; height: 1px; visibility: hidden; }
            SigningPrivateKey spk = editBean.getSigningPrivateKey(curTunnel);
            if (spk == null) {
                %><tr><td class="infohelp"><%=intl._t("Destination signing key is not available. Start the tunnel.")%></td></tr><%
+           } else if (spk.isOffline()) {
+               %><tr><td class="infohelp"><%=intl._t("Destination signing key is offline. Use CLI tools on the offline machine.")%></td></tr><%
            } else {
                valid = true;
                OrderedProperties props = new OrderedProperties();

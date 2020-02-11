@@ -228,8 +228,6 @@ public class ConfigServiceHandler extends FormHandler {
 
     @Override
     protected void processForm() {
-        if (_action == null) return;
-        
         if (_t("Shutdown gracefully").equals(_action)) {
             if (_context.hasWrapper())
                 registerWrapperNotifier(Router.EXIT_GRACEFUL, false);
@@ -271,7 +269,7 @@ public class ConfigServiceHandler extends FormHandler {
             try {
                 WrapperManager.requestThreadDump();
             } catch (Throwable t) {
-                addFormError("Warning: unable to contact the service manager - " + t.getMessage());
+                addFormError("Warning: unable to contact the service manager - " + t.getLocalizedMessage());
             }
             File wlog = wrapperLogFile(_context);
             addFormNotice(_t("Threads dumped to {0}", wlog.getAbsolutePath()));
@@ -329,7 +327,7 @@ public class ConfigServiceHandler extends FormHandler {
             Runtime.getRuntime().exec("install_i2p_service_winnt.bat");
             addFormNotice(_t("Service installed"));
         } catch (IOException ioe) {
-            addFormError(_t("Warning: unable to install the service") + " - " + ioe.getMessage());
+            addFormError(_t("Warning: unable to install the service") + " - " + ioe.getLocalizedMessage());
         }
     }
 
@@ -338,29 +336,35 @@ public class ConfigServiceHandler extends FormHandler {
             Runtime.getRuntime().exec("uninstall_i2p_service_winnt.bat");
             addFormNotice(_t("Service removed"));
         } catch (IOException ioe) {
-            addFormError(_t("Warning: unable to remove the service") + " - " + ioe.getMessage());
+            addFormError(_t("Warning: unable to remove the service") + " - " + ioe.getLocalizedMessage());
         }
     }
 
     private void browseOnStartup(boolean shouldLaunchBrowser) {
         List<ClientAppConfig> clients = ClientAppConfig.getClientApps(_context);
-        boolean found = false;
+        ClientAppConfig ca = null;
         for (int cur = 0; cur < clients.size(); cur++) {
-            ClientAppConfig ca = clients.get(cur);
-            if (UrlLauncher.class.getName().equals(ca.className)) {
+            ClientAppConfig cac = clients.get(cur);
+            if (UrlLauncher.class.getName().equals(cac.className)) {
+                ca = cac;
                 ca.disabled = !shouldLaunchBrowser;
-                found = true;
                 break;
             }
         }
         // releases <= 0.6.5 deleted the entry completely
-        if (shouldLaunchBrowser && !found) {
+        if (shouldLaunchBrowser && ca == null) {
             String url = _context.portMapper().getConsoleURL();
-            ClientAppConfig ca = new ClientAppConfig(UrlLauncher.class.getName(), "consoleBrowser",
-                                                     url, 5, false);
-            clients.add(ca);
+            ca = new ClientAppConfig(UrlLauncher.class.getName(), "consoleBrowser",
+                                     url, 5, false);
         }
-        ClientAppConfig.writeClientAppConfig(_context, clients);
+        try {
+            if (ca != null)
+                ClientAppConfig.writeClientAppConfig(_context, ca);
+            addFormNotice(_t("Configuration saved successfully"));
+        } catch (IOException ioe) {
+            addFormError(_t("Error saving the configuration (applied but not saved) - please see the error logs"));
+            addFormError(ioe.getLocalizedMessage());
+        }
     }
 
     /**

@@ -99,7 +99,7 @@ public class I2PSnarkUtil {
         _baseName = baseName;
         _opts = new HashMap<String, String>();
         //setProxy("127.0.0.1", 4444);
-        setI2CPConfig("127.0.0.1", 7654, null);
+        setI2CPConfig("127.0.0.1", I2PClient.DEFAULT_LISTEN_PORT, null);
         _banlist = new ConcurrentHashSet<Hash>();
         _maxUploaders = Snark.MAX_TOTAL_UPLOADERS;
         _maxUpBW = SnarkManager.DEFAULT_MAX_UP_BW;
@@ -229,6 +229,34 @@ public class I2PSnarkUtil {
                 for (Map.Entry<String, String> entry : _opts.entrySet() )
                     opts.setProperty(entry.getKey(), entry.getValue());
             }
+            // override preference and start with two tunnels. IdleChecker will ramp up/down as necessary
+            String sin = opts.getProperty("inbound.quantity");
+            if (sin != null) {
+                int in;
+                try {
+                   in = Integer.parseInt(sin);
+                } catch (NumberFormatException nfe) {
+                   in = 3;
+                }
+                if (in > 2)
+                    opts.setProperty("inbound.quantity", "2");
+            }
+            String sout = opts.getProperty("outbound.quantity");
+            if (sout != null) {
+                int out;
+                try {
+                   out = Integer.parseInt(sout);
+                } catch (NumberFormatException nfe) {
+                   out = 3;
+                }
+                if (out > 2)
+                    opts.setProperty("outbound.quantity", "2");
+            }
+            if (opts.containsKey("inbound.backupQuantity"))
+                opts.setProperty("inbound.backupQuantity", "0");
+            if (opts.containsKey("outbound.backupQuantity"))
+                opts.setProperty("outbound.backupQuantity", "0");
+
             if (opts.getProperty("inbound.nickname") == null)
                 opts.setProperty("inbound.nickname", _baseName.replace("i2psnark", "I2PSnark"));
             if (opts.getProperty("outbound.nickname") == null)

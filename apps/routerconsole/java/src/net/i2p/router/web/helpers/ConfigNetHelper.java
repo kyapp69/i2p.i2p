@@ -358,7 +358,7 @@ public class ConfigNetHelper extends HelperBase {
             }
             buf.append("<option style=\"text-align: right;\" value=\"").append(val).append("\" ");
             if (pct == val) {
-                buf.append("selected=\"selected\" ");
+                buf.append(SELECTED);
                 found = true;
             }
             buf.append(">").append(val).append("%</option>\n");
@@ -375,9 +375,9 @@ public class ConfigNetHelper extends HelperBase {
     public int getShareBandwidth() {
         int irateKBps = _context.bandwidthLimiter().getInboundKBytesPerSecond();
         int orateKBps = _context.bandwidthLimiter().getOutboundKBytesPerSecond();
-        double pct = _context.router().getSharePercentage();
         if (irateKBps < 0 || orateKBps < 0)
             return DEFAULT_SHARE_KBPS;
+        double pct = _context.router().getSharePercentage();
         return (int) (pct * Math.min(irateKBps, orateKBps));
     }
 }

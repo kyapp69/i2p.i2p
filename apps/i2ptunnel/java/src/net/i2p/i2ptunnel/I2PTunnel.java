@@ -66,10 +66,14 @@ import net.i2p.client.I2PSession;
 import net.i2p.client.I2PSessionException;
 import net.i2p.client.I2PSimpleClient;
 import net.i2p.client.naming.NamingService;
+import net.i2p.crypto.Blinding;
+import net.i2p.crypto.EncType;
 import net.i2p.data.Base64;
+import net.i2p.data.BlindData;
 import net.i2p.data.DataFormatException;
 import net.i2p.data.DataHelper;
 import net.i2p.data.Destination;
+import net.i2p.data.PrivateKey;
 import net.i2p.i2ptunnel.socks.I2PSOCKSIRCTunnel;
 import net.i2p.i2ptunnel.socks.I2PSOCKSTunnel;
 import net.i2p.i2ptunnel.streamr.StreamrConsumer;
@@ -97,13 +101,19 @@ public class I2PTunnel extends EventDispatcherImpl implements Logging {
     public boolean ownDest = false;
 
     /** the I2CP port, non-null */
-    public String port = System.getProperty(I2PClient.PROP_TCP_PORT, "7654");
+    public String port = System.getProperty(I2PClient.PROP_TCP_PORT, Integer.toString(I2PClient.DEFAULT_LISTEN_PORT));
     /** the I2CP host, non-null */
     public String host = System.getProperty(I2PClient.PROP_TCP_HOST, "127.0.0.1");
     /** the listen-on host. Sadly the listen-on port does not have a field. */
     public String listenHost = host;
 
     public long readTimeout = -1;
+
+    /**
+     *  Absolute path to filter definition file
+     *  @since 0.9.40
+     */
+    public String filterDefinition;
 
     private static final String nocli_args[] = { "-nocli", "-die"};
 
@@ -442,6 +452,8 @@ public class I2PTunnel extends EventDispatcherImpl implements Logging {
             runOwnDest(args, l);
         } else if (cmdname.equals("auth")) {
             runAuth(args, l);
+        } else if (cmdname.equals("blinding")) {
+            runBlinding(args, l);
         } else {
             l.log("Unknown command [" + cmdname + "]");
         }
@@ -458,6 +470,7 @@ public class I2PTunnel extends EventDispatcherImpl implements Logging {
         l.log("Command list:\n" +
         // alphabetical please...
               "  auth <username> <password>\n" +
+              "  blinding [-d|p] [-k key] [-s password] [-e expires] xxx.b32.i2p\n" +
               "  client <port> <pubkey>[,<pubkey,...]|file:<pubkeyfile> [<sharedClient>]\n" +
               "  clientoptions [-acx] [key=value ]*\n" +
               "  close [forced|destroy] <jobnumber>|all\n" +
@@ -955,14 +968,12 @@ public class I2PTunnel extends EventDispatcherImpl implements Logging {
                     if (args.length == 3)
                         proxy = args[2];
                 } else if ("false".equalsIgnoreCase(args[1].trim())) {
-                    _log.warn("args[1] == [" + args[1] + "] and rejected explicitly");
                     isShared = false;
                     if (args.length == 3)
                         proxy = args[2];
                 } else if (args.length == 3) {
                     isShared = false; // not "true"
                     proxy = args[2];
-                    _log.warn("args[1] == [" + args[1] + "] but rejected");
                 } else {
                     // isShared not specified, default to true
                     isShared = true;
@@ -1024,14 +1035,12 @@ public class I2PTunnel extends EventDispatcherImpl implements Logging {
                     if (args.length == 3)
                         proxy = args[2];
                 } else if ("false".equalsIgnoreCase(args[1].trim())) {
-                    _log.warn("args[1] == [" + args[1] + "] and rejected explicitly");
                     isShared = false;
                     if (args.length == 3)
                         proxy = args[2];
                 } else if (args.length == 3) {
                     isShared = false; // not "true"
                     proxy = args[2];
-                    _log.warn("args[1] == [" + args[1] + "] but rejected");
                 } else {
                     // isShared not specified, default to true
                     isShared = true;
@@ -1093,7 +1102,6 @@ public class I2PTunnel extends EventDispatcherImpl implements Logging {
                 if (Boolean.parseBoolean(args[2].trim())) {
                     isShared = true;
                 } else if ("false".equalsIgnoreCase(args[2].trim())) {
-                    _log.warn("args[2] == [" + args[2] + "] and rejected explicitly");
                     isShared = false;
                 } else {
                     // isShared not specified, default to true
@@ -1368,8 +1376,8 @@ public class I2PTunnel extends EventDispatcherImpl implements Logging {
      */
     private void runAuth(String args[], Logging l) {
         if (args.length == 2) {
-            _clientOptions.setProperty("i2cp.username", args[0]);
-            _clientOptions.setProperty("i2cp.password", args[1]);
+            _clientOptions.setProperty(I2PClient.PROP_USER, args[0]);
+            _clientOptions.setProperty(I2PClient.PROP_PW, args[1]);
         } else {
             l.log("Usage:\n" +
                   "  auth <username> <password>\n" +
@@ -1647,9 +1655,9 @@ public class I2PTunnel extends EventDispatcherImpl implements Logging {
             notifyEvent("lookupResult", "invalidUsage");
         } else {
             try {
-                boolean ssl = Boolean.parseBoolean(_clientOptions.getProperty("i2cp.SSL"));
-                String user = _clientOptions.getProperty("i2cp.username");
-                String pw = _clientOptions.getProperty("i2cp.password");
+                boolean ssl = Boolean.parseBoolean(_clientOptions.getProperty(I2PClient.PROP_ENABLE_SSL));
+                String user = _clientOptions.getProperty(I2PClient.PROP_USER);
+                String pw = _clientOptions.getProperty(I2PClient.PROP_PW);
                 Destination dest = destFromName(args[0], host, port, ssl, user, pw);
                 if (dest == null) {
                     l.log("Unknown host: " + args[0]);
@@ -1690,6 +1698,110 @@ public class I2PTunnel extends EventDispatcherImpl implements Logging {
         } else {
             l.log(I2Ping.usage());
             notifyEvent("pingTaskId", Integer.valueOf(-1));
+        }
+    }
+
+    /**
+     * Send a BlindingInfo message, just for testing
+     * @since 0.9.43
+     */
+    private void runBlinding(String[] argv, Logging l) {
+        // blinding [-d|p] [-k key] [-s password] [-e expires] xxx.b32.i2p  // -d for DH; -p for PSK; expires in days
+        Getopt g = new Getopt("blinding", argv, "dpk:s:e:");
+        boolean error = false;
+        boolean dh = false;
+        boolean psk = false;
+        String key = null;
+        String pw = null;
+        long expires = 0;
+        int c;
+        while ((c = g.getopt()) != -1) {
+          switch (c) {
+            case 'd':
+              dh = true;
+              break;
+
+            case 'p':
+              psk = true;
+              break;
+
+            case 'k':
+              key = g.getOptarg();
+              break;
+
+            case 's':
+              pw = g.getOptarg();
+              break;
+
+            case 'e':
+              expires = Long.parseLong(g.getOptarg());
+              break;
+
+            case '?':
+            case ':':
+            default:
+              error = true;
+          }
+        }
+        int remaining = argv.length - g.getOptind();
+        if (error || remaining != 1 || (dh && psk) || ((dh || psk) && key == null)) {
+            System.out.println("Usage: blinding [-d|p] [-k key] [-s password] [-e expires] xxx.b32.i2p  // -d for DH; -p for PSK; expires in days");
+            return;
+        }
+        String name = argv[g.getOptind()];
+        BlindData bd;
+        try {
+            int auth = BlindData.AUTH_NONE;
+            PrivateKey pk = null;
+            if (key != null) {
+                byte[] data = Base64.decode(key);
+                if (data == null || data.length != 32) {
+                    System.out.println("Invalid private key");
+                    return;
+                }
+                pk = new PrivateKey(EncType.ECIES_X25519, data);
+                auth = dh ? BlindData.AUTH_DH : BlindData.AUTH_PSK;
+            }
+            // basic check and decode
+            bd = Blinding.decode(_context, name);
+            // fill in key and secret
+            bd = new BlindData(_context, bd.getUnblindedPubKey(), bd.getBlindedSigType(), pw, auth, pk);
+            long now = _context.clock().now();
+            bd.setDate(now);
+            if (expires > 0) {
+                expires *= 24*60*60*1000L;
+                expires += now;
+                bd.setExpiration(expires);
+            }
+        } catch (IllegalArgumentException iae) {
+            System.out.println("Invalid b32 " + name + " - " + iae);
+            return;
+        }
+        boolean ssl = Boolean.parseBoolean(_clientOptions.getProperty(I2PClient.PROP_ENABLE_SSL));
+        String user = _clientOptions.getProperty(I2PClient.PROP_USER);
+        String ipw = _clientOptions.getProperty(I2PClient.PROP_PW);
+        I2PClient client = new I2PSimpleClient();
+        Properties opts = new Properties();
+        opts.put(I2PClient.PROP_TCP_HOST, host);
+        opts.put(I2PClient.PROP_TCP_PORT, port);
+        opts.put(I2PClient.PROP_ENABLE_SSL, Boolean.toString(ssl));
+        if (user != null)
+            opts.put(I2PClient.PROP_USER, user);
+        if (ipw != null)
+            opts.put(I2PClient.PROP_PW, ipw);
+        I2PSession session = null;
+        try {
+            session = client.createSession(null, opts);
+            session.connect();
+            System.out.println("Sending: " + bd);
+            session.sendBlindingInfo(bd);
+            try { Thread.sleep(1000); } catch (InterruptedException ie) {}
+        } catch (I2PSessionException ise) {
+            System.out.println("Send blinding info failed: " + ise);
+        } finally {
+            if (session != null) {
+                try { session.destroySession(); } catch (I2PSessionException ise) {}
+            }
         }
     }
 
@@ -1917,11 +2029,11 @@ public class I2PTunnel extends EventDispatcherImpl implements Logging {
                 opts.put(I2PClient.PROP_TCP_HOST, i2cpHost);
             if (i2cpPort != null)
                 opts.put(I2PClient.PROP_TCP_PORT, i2cpPort);
-            opts.put("i2cp.SSL", Boolean.toString(isSSL));
+            opts.put(I2PClient.PROP_ENABLE_SSL, Boolean.toString(isSSL));
             if (user != null)
-                opts.put("i2cp.username", user);
+                opts.put(I2PClient.PROP_USER, user);
             if (pw != null)
-                opts.put("i2cp.password", pw);
+                opts.put(I2PClient.PROP_PW, pw);
             I2PSession session = null;
             try {
                 session = client.createSession(null, opts);

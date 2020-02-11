@@ -34,9 +34,6 @@ import net.i2p.data.Hash;
 class LookupDest {
 
     private static final long DEFAULT_TIMEOUT = 15*1000;
-    private static final String PROP_ENABLE_SSL = "i2cp.SSL";
-    private static final String PROP_USER = "i2cp.username";
-    private static final String PROP_PW = "i2cp.password";
 
     protected LookupDest(I2PAppContext context) {}
 
@@ -59,28 +56,11 @@ class LookupDest {
     ****/
 
     /** @param h 32 byte hash */
-    static Destination lookupHash(I2PAppContext ctx, byte[] h) throws I2PSessionException {
+    private static Destination lookupHash(I2PAppContext ctx, byte[] h) throws I2PSessionException {
         Hash key = Hash.create(h);
         Destination rv = null;
         I2PClient client = new I2PSimpleClient();
-        Properties opts = new Properties();
-        if (!ctx.isRouterContext()) {
-            String s = ctx.getProperty(I2PClient.PROP_TCP_HOST);
-            if (s != null)
-                opts.put(I2PClient.PROP_TCP_HOST, s);
-            s = ctx.getProperty(I2PClient.PROP_TCP_PORT);
-            if (s != null)
-                opts.put(I2PClient.PROP_TCP_PORT, s);
-            s = ctx.getProperty(PROP_ENABLE_SSL);
-            if (s != null)
-                opts.put(PROP_ENABLE_SSL, s);
-            s = ctx.getProperty(PROP_USER);
-            if (s != null)
-                opts.put(PROP_USER, s);
-            s = ctx.getProperty(PROP_PW);
-            if (s != null)
-                opts.put(PROP_PW, s);
-        }
+        Properties opts = getOpts(ctx);
         I2PSession session = null;
         try {
             session = client.createSession(null, opts);
@@ -91,6 +71,53 @@ class LookupDest {
                 session.destroySession();
         }
         return rv;
+    }
+
+    /**
+     * Any hostname, but this is for long-format b32
+     *
+     * @param hostname a "b33" hostname, 64+ chars ending with ".b32.i2p"
+     * @since 0.9.40
+     */
+    static Destination lookupHostname(I2PAppContext ctx, String hostname) throws I2PSessionException {
+        Destination rv = null;
+        I2PClient client = new I2PSimpleClient();
+        Properties opts = getOpts(ctx);
+        I2PSession session = null;
+        try {
+            session = client.createSession(null, opts);
+            session.connect();
+            rv = session.lookupDest(hostname, DEFAULT_TIMEOUT);
+        } finally {
+            if (session != null)
+                session.destroySession();
+        }
+        return rv;
+    }
+
+    /**
+     * @since 0.9.40 split out from above
+     */
+    private static Properties getOpts(I2PAppContext ctx) {
+        Properties opts = new Properties();
+        if (!ctx.isRouterContext()) {
+            String s = ctx.getProperty(I2PClient.PROP_TCP_HOST);
+            if (s != null)
+                opts.put(I2PClient.PROP_TCP_HOST, s);
+            s = ctx.getProperty(I2PClient.PROP_TCP_PORT);
+            if (s != null)
+                opts.put(I2PClient.PROP_TCP_PORT, s);
+            s = ctx.getProperty(I2PClient.PROP_ENABLE_SSL);
+            if (s != null)
+                opts.put(I2PClient.PROP_ENABLE_SSL, s);
+            s = ctx.getProperty(I2PClient.PROP_USER);
+            if (s != null)
+                opts.put(I2PClient.PROP_USER, s);
+            s = ctx.getProperty(I2PClient.PROP_PW);
+            if (s != null)
+                opts.put(I2PClient.PROP_PW, s);
+        }
+        return opts;
     }
 
     public static void main(String args[]) throws I2PSessionException {

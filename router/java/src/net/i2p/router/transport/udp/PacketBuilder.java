@@ -51,7 +51,7 @@ and currently set to 0.  Peers using a different protocol version will
 not be able to communicate with this peer, though earlier versions not
 using this flag are.</p>
 
-<h2><a name="payload">Payload</a></h2>
+<h2 id="payload">Payload</h2>
 
 <p>Within the AES encrypted payload, there is a minimal common structure
 to the various messages - a one byte flag and a four byte sending 
@@ -550,11 +550,14 @@ class PacketBuilder {
         authenticate(packet, peer.getCurrentCipherKey(), peer.getCurrentMACKey());
         setTo(packet, peer.getRemoteIPAddress(), peer.getRemotePort());
         
+        // FIXME ticket #2675
         // the packet could have been built before the current mtu got lowered, so
         // compare to LARGE_MTU
-        int maxMTU = peer.isIPv6() ? PeerState.MAX_IPV6_MTU : PeerState.LARGE_MTU;
-        if (off + (ipHeaderSize + UDP_HEADER_SIZE) > maxMTU) {
-            _log.error("Size is " + off + " for " + packet +
+        // Also happens on switch between IPv4 and IPv6
+        if (_log.shouldWarn()) {
+            int maxMTU = peer.isIPv6() ? PeerState.MAX_IPV6_MTU : PeerState.LARGE_MTU;
+            if (off + (ipHeaderSize + UDP_HEADER_SIZE) > maxMTU) {
+                _log.warn("Size is " + off + " for " + packet +
                        " data size " + dataSize +
                        " pkt size " + (off + (ipHeaderSize + UDP_HEADER_SIZE)) +
                        " MTU " + currentMTU +
@@ -563,6 +566,7 @@ class PacketBuilder {
                        explicitToSend + " full acks included, " +
                        partialAcksToSend + " partial acks included, " +
                        " Fragments: " + DataHelper.toString(fragments), new Exception());
+            }
         }
         
         return packet;
@@ -1210,9 +1214,12 @@ class PacketBuilder {
     
     /**
      *  build intro packets for each of the published introducers
+     *
+     *  @param emgr only to call emgr.isValid()
      *  @return empty list on failure
      */
-    public List<UDPPacket> buildRelayRequest(UDPTransport transport, OutboundEstablishState state, SessionKey ourIntroKey) {
+    public List<UDPPacket> buildRelayRequest(UDPTransport transport, EstablishmentManager emgr,
+                                             OutboundEstablishState state, SessionKey ourIntroKey) {
         UDPAddress addr = state.getRemoteAddress();
         int count = addr.getIntroducerCount();
         List<UDPPacket> rv = new ArrayList<UDPPacket>(count);
@@ -1224,16 +1231,17 @@ class PacketBuilder {
             long tag = addr.getIntroducerTag(i);
             long exp = addr.getIntroducerExpiration(i);
             // let's not use an introducer on a privileged port, sounds like trouble
-            if (ikey == null || !TransportUtil.isValidPort(iport) ||
+            if (ikey == null ||
                 iaddr == null || tag <= 0 ||
-                // must be IPv4 for now as we don't send Alice IP/port, see below
-                iaddr.getAddress().length != 4 ||
-                (!_transport.isValid(iaddr.getAddress())) ||
+                // we must use the same isValid() as EstablishmentManager.receiveRelayResponse().
+                // If an introducer isn't valid, we shouldn't send to it
+                !emgr.isValid(iaddr.getAddress(), iport) ||
                 (exp > 0 && exp < cutoff) ||
+                // FIXME this will have already failed in isValid() above, right?
                 (Arrays.equals(iaddr.getAddress(), _transport.getExternalIP()) && !_transport.allowLocal())) {
                 if (_log.shouldLog(Log.WARN))
-                    _log.warn("Cannot build a relay request to " + state.getRemoteIdentity().calculateHash()
-                               + ", as their UDP address is invalid: addr=" + addr + " index=" + i);
+                    _log.warn("Cannot build a relay request for " + state.getRemoteIdentity().calculateHash()
+                               + ", as the introducer address is invalid: " + iaddr + ':' + iport);
                 // TODO implement some sort of introducer banlist
                 continue;
             }
@@ -1614,12 +1622,19 @@ class PacketBuilder {
         off += totalSize;
         System.arraycopy(iv, 0, data, off, UDPPacket.IV_SIZE);
         off += UDPPacket.IV_SIZE;
-        DataHelper.toLong(data, off, 2, totalSize /* ^ PROTOCOL_VERSION */ );
+        // version is zero, unlikely to ever change
+        int plval = totalSize /* ^ PacketBuilder.PROTOCOL_VERSION */ ;
+        // network ID cross-check, proposal 147
+        int netid = _context.router().getNetworkID();
+        if (netid != 2) {
+            plval ^= (netid - 2) << 8;
+        }
+        DataHelper.toLong(data, off, 2, plval);
         
         int hmacLen = totalSize + UDPPacket.IV_SIZE + 2;
         //Hash hmac = _context.hmac().calculate(macKey, data, hmacOff, hmacLen);
         byte[] ba = SimpleByteCache.acquire(Hash.HASH_LENGTH);
-        _context.hmac().calculate(macKey, data, hmacOff, hmacLen, ba, 0);
+        _transport.getHMAC().calculate(macKey, data, hmacOff, hmacLen, ba, 0);
         
         if (_log.shouldLog(Log.DEBUG))
             _log.debug("Authenticating " + pkt.getLength() +

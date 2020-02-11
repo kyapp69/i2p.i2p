@@ -25,9 +25,11 @@
         </depend>
     </target>
 
+    <!-- only used if not set by a higher build.xml -->
     <property name="javac.compilerargs" value="" />
     <property name="javac.version" value="1.7" />
     <property name="require.gettext" value="true" />
+    <property name="manifest.classpath.name" value="Class-Path" />
 
     <condition property="no.bundle">
         <isfalse value="${require.gettext}" />
@@ -40,6 +42,7 @@
             srcdir="./src" 
             debug="true" deprecation="on" source="${javac.version}" target="${javac.version}" 
             destdir="./build/obj" 
+            encoding="UTF-8"
             includeAntRuntime="false" >
             <compilerarg line="${javac.compilerargs}" />
             <classpath>
@@ -79,7 +82,7 @@
         <jar destfile="./build/i2psnark.jar" basedir="./build/obj" includes="**/*.class" excludes="**/web/* **/messages_*.class, **/standalone/*">
             <manifest>
                 <attribute name="Main-Class" value="org.klomp.snark.CommandLine" />
-                <attribute name="Class-Path" value="i2p.jar mstreaming.jar streaming.jar" />
+                <attribute name="${manifest.classpath.name}" value="i2p.jar mstreaming.jar streaming.jar" />
                 <attribute name="Implementation-Version" value="${full.version}" />
                 <attribute name="Built-By" value="${build.built-by}" />
                 <attribute name="Build-Date" value="${build.timestamp}" />
@@ -162,6 +165,7 @@
         </exec>
         <javac source="${javac.version}" target="${javac.version}" 
                includeAntRuntime="false"
+               encoding="UTF-8"
                srcdir="build/messages-src" destdir="build/obj">
             <compilerarg line="${javac.compilerargs}" />
         </javac>
@@ -250,12 +254,6 @@
 
         <replace dir="build/standalone-resources/.resources/themes/snark"
             summary="true"
-            token="url(/themes/console/classic/images/"
-            value="url(/i2psnark/.resources/themes/snark/classic/images/" >
-            <include name="**/*.css" />
-        </replace>
-        <replace dir="build/standalone-resources/.resources/themes/snark"
-            summary="true"
             token="url(/themes/console/dark/images/"
             value="url(/i2psnark/.resources/themes/snark/dark/images/" >
             <include name="**/*.css" />
@@ -296,8 +294,6 @@
               todir="build/standalone-resources/.resources/themes/snark/dark/images" />
         <copy file="../../../installer/resources/themes/console/images/info/errortriangle.png"
               todir="build/standalone-resources/.resources/themes/snark/ubergine/images" />
-        <copy file="../../../installer/resources/themes/console/classic/images/bg0.png"
-              todir="build/standalone-resources/.resources/themes/snark/classic/images" />
 
         <mkdir dir="build/standalone-resources/.resources/js" />
         <copy file="../../routerconsole/jsp/js/ajax.js" todir="build/standalone-resources/.resources/js" />

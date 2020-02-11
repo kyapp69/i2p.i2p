@@ -10,6 +10,7 @@ import net.i2p.router.RouterContext;
 import net.i2p.router.util.CoDelBlockingQueue;
 import net.i2p.data.DataFormatException;
 import net.i2p.data.DataHelper;
+import net.i2p.data.SessionKey;
 import net.i2p.util.I2PThread;
 import net.i2p.util.LHMCache;
 import net.i2p.util.Log;
@@ -77,8 +78,8 @@ class PacketHandler {
             _handlers[i] = new Handler();
         }
 
-        _context.statManager().createRateStat("udp.handleTime", "How long it takes to handle a received packet after its been pulled off the queue", "udp", UDPTransport.RATES);
-        _context.statManager().createRateStat("udp.queueTime", "How long after a packet is received can we begin handling it", "udp", UDPTransport.RATES);
+        //_context.statManager().createRateStat("udp.handleTime", "How long it takes to handle a received packet after its been pulled off the queue", "udp", UDPTransport.RATES);
+        //_context.statManager().createRateStat("udp.queueTime", "How long after a packet is received can we begin handling it", "udp", UDPTransport.RATES);
         _context.statManager().createRateStat("udp.receivePacketSkew", "How long ago after the packet was sent did we receive it", "udp", UDPTransport.RATES);
         _context.statManager().createRateStat("udp.droppedInvalidUnkown", "How old the packet we dropped due to invalidity (unkown type) was", "udp", UDPTransport.RATES);
         _context.statManager().createRateStat("udp.droppedInvalidReestablish", "How old the packet we dropped due to invalidity (doesn't use existing key, not an establishment) was", "udp", UDPTransport.RATES);
@@ -181,6 +182,13 @@ class PacketHandler {
         return rv;
     }
 
+    /**
+     * @since 0.9.42
+     */
+    private boolean validate(UDPPacket packet, SessionKey key) {
+        return packet.validate(key, _transport.getHMAC());
+    }
+
     /** the packet is from a peer we are establishing an outbound con to, but failed validation, so fallback */
     private static final short OUTBOUND_FALLBACK = 1;
     /** the packet is from a peer we are establishing an inbound con to, but failed validation, so fallback */
@@ -206,11 +214,11 @@ class PacketHandler {
                 if (packet == null) break; // keepReading is probably false, or bind failed...
 
                 packet.received();
-                if (_log.shouldLog(Log.DEBUG))
-                    _log.debug("Received: " + packet);
+                //if (_log.shouldLog(Log.DEBUG))
+                //    _log.debug("Received: " + packet);
                 _state = 4;
-                long queueTime = packet.getLifetime();
-                long handleStart = _context.clock().now();
+                //long queueTime = packet.getLifetime();
+                //long handleStart = _context.clock().now();
                 try {
                     _state = 5;
                     handlePacket(_reader, packet);
@@ -220,10 +228,10 @@ class PacketHandler {
                     if (_log.shouldLog(Log.ERROR))
                         _log.error("Crazy error handling a packet: " + packet, e);
                 }
-                long handleTime = _context.clock().now() - handleStart;
+                //long handleTime = _context.clock().now() - handleStart;
                 //packet.afterHandling();
-                _context.statManager().addRateData("udp.handleTime", handleTime, packet.getLifetime());
-                _context.statManager().addRateData("udp.queueTime", queueTime, packet.getLifetime());
+                //_context.statManager().addRateData("udp.handleTime", handleTime, packet.getLifetime());
+                //_context.statManager().addRateData("udp.queueTime", queueTime, packet.getLifetime());
                 _state = 8;
 
                 //if (_log.shouldLog(Log.DEBUG))
@@ -325,17 +333,17 @@ class PacketHandler {
         private void receivePacket(UDPPacketReader reader, UDPPacket packet, PeerState state) {
             _state = 17;
             AuthType auth = AuthType.NONE;
-            boolean isValid = packet.validate(state.getCurrentMACKey());
+            boolean isValid = validate(packet, state.getCurrentMACKey());
             if (!isValid) {
                 _state = 18;
                 if (state.getNextMACKey() != null)
-                    isValid = packet.validate(state.getNextMACKey());
+                    isValid = validate(packet, state.getNextMACKey());
                 if (!isValid) {
                     _state = 19;
                     if (_log.shouldLog(Log.INFO))
                         _log.info("Failed validation with existing con, trying as new con: " + packet);
 
-                    isValid = packet.validate(_transport.getIntroKey());
+                    isValid = validate(packet, _transport.getIntroKey());
                     if (isValid) {
                         _state = 20;
                         // this is a stray packet from an inbound establishment
@@ -388,7 +396,7 @@ class PacketHandler {
          */
         private void receivePacket(UDPPacketReader reader, UDPPacket packet, short peerType) {
             _state = 27;
-            boolean isValid = packet.validate(_transport.getIntroKey());
+            boolean isValid = validate(packet, _transport.getIntroKey());
             if (!isValid) {
                 // Note that the vast majority of these are NOT corrupted packets, but
                 // packets for which we don't have the PeerState (i.e. SessionKey)
@@ -417,14 +425,15 @@ class PacketHandler {
                         int newPort = remoteHost.getPort();
                         for (PeerState ps : peers) {
                             boolean valid = false;
-                            long now = _context.clock().now();
-                            if (_log.shouldLog(Log.WARN))
+                            if (_log.shouldLog(Log.WARN)) {
+                                long now = _context.clock().now();
                                 buf.append(ps.getRemoteHostId().toString())
                                    .append(" last sent: ").append(now - ps.getLastSendTime())
                                    .append(" last rcvd: ").append(now - ps.getLastReceiveTime());
+                            }
                             if (ps.getRemotePort() == newPort) {
                                 foundSamePort = true;
-                            } else if (packet.validate(ps.getCurrentMACKey())) {
+                            } else if (validate(packet, ps.getCurrentMACKey())) {
                                 packet.decrypt(ps.getCurrentCipherKey());
                                 reader.initialize(packet);
                                 if (_log.shouldLog(Log.WARN))
@@ -512,7 +521,7 @@ class PacketHandler {
             }
             boolean isValid = false;
             if (state.getMACKey() != null) {
-                isValid = packet.validate(state.getMACKey());
+                isValid = validate(packet, state.getMACKey());
                 if (isValid) {
                     if (_log.shouldLog(Log.INFO))
                         _log.info("Valid introduction packet received for inbound con: " + packet);
@@ -557,7 +566,7 @@ class PacketHandler {
             boolean isValid = false;
             if (state.getMACKey() != null) {
                 _state = 36;
-                isValid = packet.validate(state.getMACKey());
+                isValid = validate(packet, state.getMACKey());
                 if (isValid) {
                     // this should be the Session Confirmed packet
                     if (_log.shouldLog(Log.INFO))
@@ -571,7 +580,7 @@ class PacketHandler {
             }
 
             // keys not yet exchanged, lets try it with the peer's intro key
-            isValid = packet.validate(state.getIntroKey());
+            isValid = validate(packet, state.getIntroKey());
             if (isValid) {
                 if (_log.shouldLog(Log.INFO))
                     _log.info("Valid packet received for " + state + " with Bob's intro key: " + packet);

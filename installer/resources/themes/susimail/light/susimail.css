@@ -6,22 +6,12 @@ body {
      color: #33333f;
      font-family: "Droid Sans", "NotoSans", Ubuntu, "Bitstream Vera Sans", "Segoe UI", Verdana, "Lucida Grande", Helvetica, sans-serif;
      font-size: 9pt;
-     background: #a4a4cb url(/themes/console/light/images/tile2.png);
+     background: #f1f3f5;
 }
 
 /* preload button mouseovers */
 body {
-     background: url(/themes/console/light/images/tile2.png),
-     url(/themes/susimail/images/compose_hover.png) no-repeat,
-     url(/themes/susimail/images/login_hover.png) no-repeat,
-     url(/themes/susimail/images/logout_hover.png) no-repeat,
-     url(/themes/susimail/images/offline_hover.png) no-repeat,
-     url(/themes/susimail/images/save_hover.png) no-repeat,
-     url(/themes/susimail/images/send_hover.png) no-repeat,
-     url(/themes/console/images/buttons/configure_hover.png),
-     url(/themes/console/images/buttons/delete_hover.png),
-     url(/themes/console/images/buttons/update_hover.png), #a4a4cb !important;
-     background-size: 32px 32px, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0 !important;
+  background: #f1f3f5;
 }
 
 body.iframed {
@@ -33,7 +23,7 @@ body.iframed {
      background: url(/themes/console/images/transparent.gif),
      url(/themes/susimail/images/compose_hover.png) no-repeat,
      url(/themes/susimail/images/login_hover.png) no-repeat,
-     url(/themes/susimail/images/logout_hover.png) no-repeat,
+     url(images/logout.png) no-repeat,
      url(/themes/susimail/images/offline_hover.png) no-repeat,
      url(/themes/susimail/images/save_hover.png) no-repeat,
      url(/themes/susimail/images/send_hover.png) no-repeat,
@@ -50,6 +40,7 @@ body.iframed {
 #pagenav, .sort, .topbuttons, h3 {
      -moz-user-select: none;
      -webkit-user-select: none;
+     -ms-user-select: none;
      user-select: none;
 }
 
@@ -70,6 +61,7 @@ body.iframed {
 #mailbox td:first-child, #mailbox td:nth-child(2), #mailbox td:nth-child(4), #mailbox td:nth-child(6), #mailbox td:nth-child(8) {
      -moz-user-select: none;
      -webkit-user-select: none;
+     -ms-user-select: none;
      user-select: none;
 }
 
@@ -156,10 +148,8 @@ div.header, .iframed .header {
 div.footer {
      border-top: none;
      margin: -14px 0 10px;
-     border: 1px solid #7778bf;
-     background: #eef;
-     background: linear-gradient(to right, rgba(232,232,255,0.3) 35%, #fafaff 50%, rgba(232,232,255,0.3) 65%), repeating-linear-gradient(to bottom, #fff 1px, #ddf 2px, #fff 3px);
-     box-shadow: inset 0 0 0 1px #fff;
+     border: 1px solid #f1f3f5;
+     background: #f1f3f5;
 }
 
 p.footer {
@@ -168,8 +158,7 @@ p.footer {
      line-height: 10pt;
      text-align: center;
      padding: 3px;
-     color: #449 !important;
-     text-shadow: 0 0 5px #fff;
+     color: #495057 !important;
 }
 
 .iframed .footer {
@@ -270,16 +259,15 @@ pre {
 }
 
 .page {
-     background-color: #fcfcff;
+     background-color: #f1f3f5;
      color: #33333f;
      margin: 0;
      padding: 10px 10px 0;
      border-radius: 2px 2px 0 0;
      font-size: 8.5pt !important;
      line-height: 160% !important;
-     box-shadow: inset 0 0 0 1px #bbf;
      text-align: center;
-     border: 1px solid #447;
+     border: 1px solid #f1f3f5;
      min-width: 800px;
 }
 
@@ -526,7 +514,7 @@ input[type="submit"], input[type="reset"] {
      padding: 4px 5px;
      text-decoration: none;
      text-shadow: 0 1px 1px #fff;
-     border-radius: 2px;
+     border-radius: 15px;
      opacity: 1;
      background-size: 14px auto, 100% 100% !important;
      filter: drop-shadow(0 0 1px rgba(180, 180, 255, 0.6));
@@ -599,24 +587,26 @@ input.download:hover {
 
 input.offline {
      background: #eee url(/themes/susimail/images/offline.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/offline.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
-     padding: 5px 7px 5px 24px;
+     background: #f8f9fa;
+     border-radius: 15px;
+     padding: 7px;
 }
 
 input.offline:hover {
      background: #fff url(/themes/susimail/images/offline_hover.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/offline_hover.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
+     background: #f1f3f5;
 }
 
 input.list, input.moveto, #pagenav input.switchto {
-     background: #eee url(/themes/susimail/images/folder.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/folder.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
+     background: #eee url(images/folder.png) no-repeat 6px center;
+     background: url(images/folder.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
      padding: 5px 7px 5px 24px;
+     border-radius: 15px;
 }
 
 input.list:hover, input.moveto:hover, input.switchto:hover {
-     background: #eee url(/themes/susimail/images/folder-open.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/folder-open.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
+     background: #eee url(images/folder.png) no-repeat 6px center;
+     background: url(images/folder.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
 }
 
 input.forward {
@@ -632,35 +622,36 @@ input.forward:hover {
 
 input.login {
      background: #eee url(/themes/susimail/images/login.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/login.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
-     padding: 5px 7px 5px 24px;
+     background: #f8f9fa;
+     border-radius: 15px;
+     padding: 7px;
 }
 
 input.login:hover {
      background: #fff url(/themes/susimail/images/login_hover.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/login_hover.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
+     background: #f1f3f5;
 }
 
 input.logout {
-     background: #eee url(/themes/susimail/images/logout.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/logout.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
+     background: #eee url(images/logout.png) no-repeat 6px center;
+     background: url(images/logout.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
      padding: 5px 7px 5px 24px;
 }
 
 input.logout:hover {
-     background: #fff url(/themes/susimail/images/logout_hover.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/logout_hover.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
+     background: #fff url(images/logout.png) no-repeat 6px center;
+     background: url(images/logout.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
 }
 
 input.reload, input.refresh {
-     background: #eee url(/themes/console/images/buttons/update.png) no-repeat 6px center;
-     background: url(/themes/console/images/buttons/update.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
+     background: #eee url(images/refresh.png) no-repeat 6px center;
+     background: url(images/refresh.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
      padding: 5px 7px 5px 24px;
 }
 
 input.reload:hover, input.refresh:hover {
-     background: #eee url(/themes/console/images/buttons/update_hover.png) no-repeat 6px center;
-     background: url(/themes/console/images/buttons/update_hover.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
+     background: #eee url(images/refresh.png) no-repeat 6px center;
+     background: url(images/refresh.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
 }
 
 input.invertselection {
@@ -687,25 +678,25 @@ input.show:hover {
 }
 
 input.markall {
-     background: #eee url(/themes/susimail/images/all.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/all.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
+     background: #eee url(images/book.png) no-repeat 6px center;
      padding: 5px 7px 5px 24px;
 }
 
 input.markall:hover {
-     background: #fff url(/themes/susimail/images/all.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/all.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
+     background: #fff url(images/book.png) no-repeat 6px center;
 }
 
 input.new {
-     background: #eee url(/themes/susimail/images/compose.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/compose.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
+     background: #eee url(images/edit.png) no-repeat 6px center;
+     background: url(images/edit.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
      padding: 5px 7px 5px 24px;
+     border-radius: 15px;
 }
 
 input.new:hover {
-     background: #fff url(/themes/susimail/images/compose_hover.png) no-repeat 6px center;
-     background: url(/themes/susimail/images/compose_hover.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
+     background: #fff url(images/edit.png) no-repeat 6px center;
+     background: url(images/edit.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
+     border-radius: 15px;
 }
 
 input.reply {
@@ -818,13 +809,14 @@ input.send:hover {
 
 input.configure {
      background: #eee url(/themes/console/images/buttons/configure.png) no-repeat 6px center;
-     background: url(/themes/console/images/buttons/configure.png) no-repeat 6px center, linear-gradient(to bottom, #fff, #efefff);
-     padding: 5px 7px 5px 24px;
+     background: #f8f9fa;
+     border-radius: 15px;
+     padding: 7px;
 }
 
 input.configure:hover {
      background: #fff url(/themes/console/images/buttons/configure_hover.png) no-repeat 6px center;
-     background: url(/themes/console/images/buttons/configure_hover.png) no-repeat 6px center, linear-gradient(to bottom, #eee, #fff);
+     background: #f1f3f5;
 }
 
 input.saveas {
@@ -907,6 +899,31 @@ input[type="text"][disabled] {
      filter: none;
 }
 
+input.login {
+    background: url(images/login.png) 8px center no-repeat !important;
+    padding-left: 30px !important;
+}
+
+input.offline {
+    background: url(images/offline.png) 8px center no-repeat !important;
+    padding-left: 30px !important;
+}
+
+input.configure {
+    background: url(images/settings.png) 8px center no-repeat !important;
+    padding-left: 30px !important;
+}
+
+a.mailhelp {
+    background: url(images/help.png) 8px center no-repeat !important;
+    padding-left: 30px !important;
+}
+
+a.mailcreate {
+    background: url(images/account.png) 8px center no-repeat !important;
+    padding-left: 30px !important;
+}
+
 textarea {
      font-family: "Droid Sans Mono", "Noto Mono", "Lucida Console", "DejaVu Sans Mono", monospace;
      font-size: 9pt;
@@ -984,11 +1001,9 @@ div#mailheader {
      margin: 40px auto 40px;
      padding: 10px 10px 0;
      width: 600px;
-     border: 1px solid #77789f;
+     border: 1px solid #dee2e6;
      border-radius: 2px;
-     box-shadow: inset 0 0 2px 2px rgba(225, 225, 255, 0.5), 0 0 2px rgba(100, 100, 200, 0.6);
-     background: #fafaff;
-     background: linear-gradient(to bottom, #fafaff, rgba(232,232,255,0.5)), linear-gradient(to bottom, rgba(255,255,255,0.7) 5%, rgba(220,220,255,0.9)), linear-gradient(to right, #fff, #efefff, #fff);
+     background: #dee2e6;
      background-size: 100% 100%, auto 2px, 100%, 100%;
 }
 
@@ -1015,15 +1030,14 @@ div#mailheader {
 }
 
 #dologin h1 {
-     background: #fafaff;
-     background: linear-gradient(to bottom, #fff 50%, #f2f2ff 50%);
-     border-bottom: 1px solid #77789f;
-     color: #4c526f;
-     text-transform: uppercase;
+     background: #4661A9;
+     border-bottom: 1px solid #4661A9;
+     color: #f8f9fa;
+     text-transform: capitalize;
      letter-spacing: 0.1em;
      word-spacing: 0.1em;
      font-size: 14pt;
-     text-align: left;
+     text-align: center;
      padding: 12px 10px 12px 15px;
      margin: -9px -9px 5px;
 }
@@ -1187,6 +1201,7 @@ input.moveto {
      float: left;
      margin-left: 2px;
      margin-top: 2px !important;
+     border-radius: 15px;
 }
 
 .topbuttons input.prev, .topbuttons input[name="prev"], .topbuttons input.prevpage, .topbuttons input[name="prevpage"],

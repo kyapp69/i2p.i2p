@@ -46,8 +46,10 @@
         </dependset>
     </target>
 
+    <!-- only used if not set by a higher build.xml -->
     <property name="javac.compilerargs" value="" />
     <property name="javac.version" value="1.7" />
+    <property name="manifest.classpath.name" value="Class-Path" />
 
     <target name="compile" depends="prepare, depend, dependVersion">
         <mkdir dir="./build" />
@@ -56,6 +58,7 @@
             srcdir="./src" 
             debug="true" deprecation="on" source="${javac.version}" target="${javac.version}" 
             includeAntRuntime="false"
+            encoding="UTF-8"
             destdir="./build/obj">
             <compilerarg line="${javac.compilerargs}" />
             <classpath>
@@ -79,6 +82,7 @@
 
                 <!-- following jars only present for debian builds -->
                 <pathelement location="../../jetty/jettylib/tomcat-api.jar" />
+                <pathelement location="../../../core/java/build/json-simple.jar" />
             </classpath>
         </javac>
     </target>
@@ -92,6 +96,7 @@
             includes="net/i2p/router/news/*.java"
             debug="true" deprecation="on" source="${javac.version}" target="${javac.version}" 
             includeAntRuntime="false"
+            encoding="UTF-8"
             destdir="./build/obj">
             <compilerarg line="${javac.compilerargs}" />
             <classpath>
@@ -123,12 +128,21 @@
     <target name="jar1" depends="compile, bundle-news, bundle-countries, jarUpToDate, listChangedFiles" unless="jar.uptodate" >
         <!-- set if unset -->
         <property name="workspace.changes.j.tr" value="" />
+        <!-- copy the NDT translations, strip the countries -->
+        <copy file="src/edu/internet2/ndt/locale/Tcpbw100_msgs_en_US.properties" tofile="build/obj/edu/internet2/ndt/locale/Tcpbw100_msgs.properties" />
+        <copy file="src/edu/internet2/ndt/locale/Tcpbw100_msgs_ca_ES.properties" tofile="build/obj/edu/internet2/ndt/locale/Tcpbw100_msgs_ca.properties" />
+        <copy file="src/edu/internet2/ndt/locale/Tcpbw100_msgs_el_GR.properties" tofile="build/obj/edu/internet2/ndt/locale/Tcpbw100_msgs_el.properties" />
+        <copy file="src/edu/internet2/ndt/locale/Tcpbw100_msgs_fr_FR.properties" tofile="build/obj/edu/internet2/ndt/locale/Tcpbw100_msgs_fr.properties" />
+        <copy file="src/edu/internet2/ndt/locale/Tcpbw100_msgs_nb_NO.properties" tofile="build/obj/edu/internet2/ndt/locale/Tcpbw100_msgs_nb.properties" />
+        <copy file="src/edu/internet2/ndt/locale/Tcpbw100_msgs_nl_NL.properties" tofile="build/obj/edu/internet2/ndt/locale/Tcpbw100_msgs_nl.properties" />
+        <copy file="src/edu/internet2/ndt/locale/Tcpbw100_msgs_pt_BR.properties" tofile="build/obj/edu/internet2/ndt/locale/Tcpbw100_msgs_pt.properties" />
+        <copy file="src/edu/internet2/ndt/locale/Tcpbw100_msgs_ru_RU.properties" tofile="build/obj/edu/internet2/ndt/locale/Tcpbw100_msgs_ru.properties" />
         <jar destfile="./build/routerconsole.jar" basedir="./build/obj" excludes="net/i2p/router/web/helpers/* net/i2p/router/web/servlets/*">
             <manifest>
                 <!-- DTG added in 0.8.4, not in the classpath for very old installs, before we changed wrapper.config to specify * -->
                 <!-- very old installs don't have i2psnark,jstl,standard in the classpath... not added in WebAppConfiguration any more -->
                 <!-- All new jetty 7 jars should have been in 0.9.6, added in 0.9.7 -->
-                <attribute name="Class-Path" value="i2p.jar router.jar jrobin.jar desktopgui.jar i2psnark.jar jstl.jar standard.jar jstlel.jar jetty-continuation.jar jetty-http.jar jetty-io.jar jetty-security.jar jetty-servlet.jar jetty-servlets.jar jetty-util.jar jetty-webapp.jar" />
+                <attribute name="${manifest.classpath.name}" value="i2p.jar router.jar jrobin.jar desktopgui.jar i2psnark.jar jstl.jar standard.jar jstlel.jar jetty-continuation.jar jetty-http.jar jetty-io.jar jetty-security.jar jetty-servlet.jar jetty-servlets.jar jetty-util.jar jetty-webapp.jar" />
                 <attribute name="Implementation-Version" value="${full.version}" />
                 <attribute name="Built-By" value="${build.built-by}" />
                 <attribute name="Build-Date" value="${build.timestamp}" />
@@ -165,6 +179,7 @@
         </exec>
         <javac source="${javac.version}" target="${javac.version}" 
                includeAntRuntime="false"
+               encoding="UTF-8"
                srcdir="build/messages-src" destdir="build/obj">
             <compilerarg line="${javac.compilerargs}" />
         </javac>
@@ -222,6 +237,7 @@
         </exec>
         <javac source="${javac.version}" target="${javac.version}" 
                includeAntRuntime="false"
+               encoding="UTF-8"
                srcdir="build/messages-news-src" destdir="build/obj">
             <compilerarg line="${javac.compilerargs}" />
         </javac>
@@ -241,6 +257,7 @@
         </exec>
         <javac source="${javac.version}" target="${javac.version}" 
                includeAntRuntime="false"
+               encoding="UTF-8"
                srcdir="build/messages-countries-src" destdir="build/obj">
             <compilerarg line="${javac.compilerargs}" />
         </javac>
@@ -353,7 +370,13 @@
         <mkdir dir="../jsp/WEB-INF/" />
         <mkdir dir="../jsp/WEB-INF/classes" />
 
-        <!-- there are various jspc ant tasks, but they all seem a bit flakey -->
+        <!-- There are various jspc ant tasks, but they all seem a bit flakey.
+             Warning - jspC will fail on unknown options,
+             check oldest libtomcat8-java distro package version we use.
+             Jessie has 8.0.14; xenial has 8.0.32; we bundle for precise/trusty.
+             Add below to get supported options:
+                <arg value="-help" />
+          -->
         <!--
            **     Usage: jspc <options> <jsp files>
            **     where jsp files is
@@ -381,10 +404,38 @@
            **         -classpath <path>  Overrides java.class.path system property
            **         -xpoweredBy        Add X-Powered-By response header
            **         -trimSpaces        Trim spaces in template text between actions, directives
+           **     Following as of ?.?.??:
+           **         -javaEncoding <enc> Set the encoding charset for Java classes (default UTF-8)
+           **         -source <version>   Set the -source argument to the compiler (default 1.7)
+           **         -target <version>   Set the -target argument to the compiler (default 1.7)
+           **     Following as of 8.5.33:
+           **         -threadCount <count>  Number of threads to use for compilation.
+           **                               (default one per core)
+           **                               ("2.0C" means two threads per core)
         -->
-        <java classname="org.apache.jasper.JspC" fork="true" failonerror="true">
+        <!--
+           **  Simply call org.apache.jasper.JspC, then exit.
+           **
+           **  As of Tomcat 8.5.33, forking their JspC won't complete,
+           **  because the JspC compilation is now threaded and the thread pool workers aren't daemons.
+           **  Will be fixed in 8.5.35, but we don't know what version distros may have.
+           **
+           **  https://tomcat.apache.org/tomcat-8.5-doc/changelog.html
+           **  https://bz.apache.org/bugzilla/show_bug.cgi?id=53492
+           **  http://trac.i2p2.i2p/ticket/2307
+           **  https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=908884
+           **  https://bz.apache.org/bugzilla/show_bug.cgi?id=62674
+           **
+           **  We could set fork=false in build.xml, but then the paths are all wrong.
+        -->
+        <java classname="net.i2p.servlet.util.JspC" fork="true" failonerror="true">
             <!-- this prevents tomcat from complaining in debian builds -->
             <jvmarg value="-Dtomcat.util.scan.StandardJarScanFilter.jarsToSkip=commons-collections.jar,junit.jar,junit4.jar" />
+            <!-- these are to detect tomcat version and reproducible build setting -->
+            <jvmarg value="-Dbuild.reproducible=${build.reproducible}" />
+            <jvmarg value="-Dwith-libtomcat8-java=${with-libtomcat8-java}" />
+            <jvmarg value="-Dwith-libtomcat9-java=${with-libtomcat9-java}" />
+            <jvmarg value="-Djasper.jar=../../jetty/jettylib/jasper-runtime.jar" />
             <classpath>
                 <pathelement location="../../jetty/jettylib/jasper-runtime.jar" />
                 <pathelement location="../../jetty/jettylib/javax.servlet.jar" />
@@ -467,8 +518,8 @@
         <property name="__class3" value="${__match1}configreseed${__match2}" />
         <property name="__multipart" value="&#10;
        &lt;multipart-config&gt;&#10;
-           &lt;max-file-size&gt;67108864&lt;/max-file-size&gt;&#10;
-           &lt;max-request-size&gt;67108864&lt;/max-request-size&gt;&#10;
+           &lt;max-file-size&gt;134217728&lt;/max-file-size&gt;&#10;
+           &lt;max-request-size&gt;134217728&lt;/max-request-size&gt;&#10;
            &lt;file-size-threshold&gt;262144&lt;/file-size-threshold&gt;&#10;
        &lt;/multipart-config&gt;" />
         <replace file="../jsp/web-out.xml">

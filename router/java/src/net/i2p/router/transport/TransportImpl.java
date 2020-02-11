@@ -68,6 +68,9 @@ public abstract class TransportImpl implements Transport {
     private static final long UNREACHABLE_PERIOD = 5*60*1000;
     private static final long WAS_UNREACHABLE_PERIOD = 30*60*1000;
 
+    /** @since 0.9.44 */
+    protected static final String PROP_IPV6_FIREWALLED = "i2np.lastIPv6Firewalled";
+
     static {
         long maxMemory = SystemVersion.getMaxMemory();
         long min = 512;
@@ -262,7 +265,8 @@ public abstract class TransportImpl implements Transport {
             // Bail out now as it will NPE in a dozen places below.
             return;
         }
-        boolean log = false;
+        //boolean log = false;
+        final boolean debug = _log.shouldDebug();
         if (sendSuccessful)
             msg.timestamp("afterSend(successful)");
         else
@@ -272,8 +276,8 @@ public abstract class TransportImpl implements Transport {
             msg.transportFailed(getStyle());
 
         if (msToSend > 1500) {
-            if (_log.shouldLog(Log.INFO))
-                _log.info(getStyle() + " afterSend slow: " + (sendSuccessful ? "success " : "FAIL ")
+            if (debug)
+                _log.debug(getStyle() + " afterSend slow: " + (sendSuccessful ? "success " : "FAIL ")
                           + msg.getMessageSize() + " byte "
                           + msg.getMessageType() + ' ' + msg.getMessageId() + " to "
                           + msg.getTarget().getIdentity().calculateHash().toBase64().substring(0,6) + " took " + msToSend + " ms");
@@ -283,34 +287,34 @@ public abstract class TransportImpl implements Transport {
 
         long lifetime = msg.getLifetime();
         if (lifetime > 3000) {
-            int level = Log.INFO;
-            if (!sendSuccessful)
-                level = Log.DEBUG;
+            int level = Log.DEBUG;
+            //if (!sendSuccessful)
+            //    level = Log.DEBUG;
             if (_log.shouldLog(level))
                 _log.log(level, getStyle() + " afterSend slow (" + (sendSuccessful ? "success " : "FAIL ")
                           + lifetime + "/" + msToSend + "): " + msg.getMessageSize() + " byte "
                           + msg.getMessageType() + " " + msg.getMessageId() + " from " + _context.routerHash().toBase64().substring(0,6)
                           + " to " + msg.getTarget().getIdentity().calculateHash().toBase64().substring(0,6) + ": " + msg.toString());
         } else {
-            if (_log.shouldLog(Log.INFO))
-                _log.info(getStyle() + " afterSend: " + (sendSuccessful ? "success " : "FAIL ")
+            if (debug)
+                _log.debug(getStyle() + " afterSend: " + (sendSuccessful ? "success " : "FAIL ")
                           + msg.getMessageSize() + " byte "
                           + msg.getMessageType() + " " + msg.getMessageId() + " from " + _context.routerHash().toBase64().substring(0,6)
                           + " to " + msg.getTarget().getIdentity().calculateHash().toBase64().substring(0,6) + "\n" + msg.toString());
         }
 
         if (sendSuccessful) {
-            if (_log.shouldLog(Log.DEBUG))
+            if (debug)
                 _log.debug(getStyle() + " Sent " + msg.getMessageType() + " successfully to "
                            + msg.getTarget().getIdentity().getHash().toBase64());
             Job j = msg.getOnSendJob();
             if (j != null)
                 _context.jobQueue().addJob(j);
-            log = true;
+            //log = true;
             msg.discardData();
         } else {
-            if (_log.shouldLog(Log.INFO))
-                _log.info(getStyle() + " Failed to send " + msg.getMessageType()
+            if (debug)
+                _log.debug(getStyle() + " Failed to send " + msg.getMessageType()
                           + " to " + msg.getTarget().getIdentity().getHash().toBase64()
                           + " (details: " + msg + ')');
             if (msg.getExpiration() < _context.clock().now())
@@ -323,8 +327,8 @@ public abstract class TransportImpl implements Transport {
                     _context.outNetMessagePool().add(msg);
                     // don't discard the data yet!
                 } else {
-                    if (_log.shouldLog(Log.INFO))
-                        _log.info("No more time left (" + new Date(msg.getExpiration())
+                    if (debug)
+                        _log.debug("No more time left (" + new Date(msg.getExpiration())
                                   + ", expiring without sending successfully the "
                                   + msg.getMessageType());
                     if (msg.getOnFailedSendJob() != null)
@@ -333,13 +337,13 @@ public abstract class TransportImpl implements Transport {
                     if (selector != null) {
                         _context.messageRegistry().unregisterPending(msg);
                     }
-                    log = true;
+                    //log = true;
                     msg.discardData();
                 }
             } else {
                 MessageSelector selector = msg.getReplySelector();
-                if (_log.shouldLog(Log.INFO))
-                    _log.info("Failed and no requeue allowed for a "
+                if (debug)
+                    _log.debug("Failed and no requeue allowed for a "
                               + msg.getMessageSize() + " byte "
                               + msg.getMessageType() + " message with selector " + selector, new Exception("fail cause"));
                 if (msg.getOnFailedSendJob() != null)
@@ -348,30 +352,31 @@ public abstract class TransportImpl implements Transport {
                     _context.jobQueue().addJob(msg.getOnFailedReplyJob());
                 if (selector != null)
                     _context.messageRegistry().unregisterPending(msg);
-                log = true;
+                //log = true;
                 msg.discardData();
             }
         }
 
+/****
         if (log) {
-            /*
             String type = msg.getMessageType();
             // the udp transport logs some further details
             _context.messageHistory().sendMessage(type, msg.getMessageId(),
                                                   msg.getExpiration(),
                                                   msg.getTarget().getIdentity().getHash(),
                                                   sendSuccessful);
-             */
         }
+****/
 
         long now = _context.clock().now();
         long sendTime = now - msg.getSendBegin();
         long allTime = now - msg.getCreated();
         if (allTime > 5*1000) {
-            if (_log.shouldLog(Log.INFO))
-                _log.info("Took too long from preparation to afterSend(ok? " + sendSuccessful
+            if (debug)
+                _log.debug("Took too long from preparation to afterSend(ok? " + sendSuccessful
                           + "): " + allTime + "ms/" + sendTime + "ms after failing on: "
-                          + msg.getFailedTransports() + " and succeeding on " + getStyle());
+                          + msg.getFailedTransports()
+                          + (sendSuccessful ? (" and succeeding on " + getStyle()) : ""));
             if ( (allTime > 60*1000) && (sendSuccessful) ) {
                 // VERY slow
                 if (_log.shouldLog(Log.WARN))
@@ -450,12 +455,9 @@ public abstract class TransportImpl implements Transport {
      * @param remoteIdentHash may be null, calculated from remoteIdent if null
      */
     public void messageReceived(I2NPMessage inMsg, RouterIdentity remoteIdent, Hash remoteIdentHash, long msToReceive, int bytesReceived) {
-        //if (true)
-        //    _log.error("(not error) I2NP message received: " + inMsg.getUniqueId() + " after " + msToReceive);
-
-        int level = Log.INFO;
-        if (msToReceive > 5000)
-            level = Log.WARN;
+        int level = Log.DEBUG;
+        //if (msToReceive > 5000)
+        //    level = Log.WARN;
         if (_log.shouldLog(level)) {
             StringBuilder buf = new StringBuilder(128);
             buf.append("Message received: ").append(inMsg.getClass().getSimpleName());
@@ -470,10 +472,6 @@ public abstract class TransportImpl implements Transport {
             } else {
                 buf.append("[unknown]");
             }
-            buf.append(" and forwarding to listener: ");
-            if (_listener != null)
-                buf.append(_listener);
-
             _log.log(level, buf.toString());
         }
 
@@ -519,6 +517,9 @@ public abstract class TransportImpl implements Transport {
     /**
      *  What address are we currently listening to?
      *  Replaces getCurrentAddress()
+     *
+     *  Note: An address without a host is considered IPv4.
+     *
      *  @param ipv6 true for IPv6 only; false for IPv4 only
      *  @return first matching address or null
      *  @since IPv6
@@ -850,10 +851,10 @@ public abstract class TransportImpl implements Transport {
     public void mayDisconnect(Hash peer) {}
 
     public boolean isUnreachable(Hash peer) {
-        long now = _context.clock().now();
         synchronized (_unreachableEntries) {
             Long when = _unreachableEntries.get(peer);
             if (when == null) return false;
+            long now = _context.clock().now();
             if (when.longValue() + UNREACHABLE_PERIOD < now) {
                 _unreachableEntries.remove(peer);
                 return false;
@@ -914,10 +915,10 @@ public abstract class TransportImpl implements Transport {
      * This is NOT reset if the peer contacts us.
      */
     public boolean wasUnreachable(Hash peer) {
-        long now = _context.clock().now();
         synchronized (_wasUnreachableEntries) {
             Long when = _wasUnreachableEntries.get(peer);
             if (when != null) {
+                long now = _context.clock().now();
                 if (when.longValue() + WAS_UNREACHABLE_PERIOD < now) {
                     _unreachableEntries.remove(peer);
                     return false;
@@ -946,8 +947,8 @@ public abstract class TransportImpl implements Transport {
                 _wasUnreachableEntries.remove(peer);
             }
         }
-        if (_log.shouldLog(Log.INFO))
-            _log.info(this.getStyle() + " setting wasUnreachable to " + yes + " for " + peer,
+        if (_log.shouldDebug())
+            _log.debug(this.getStyle() + " setting wasUnreachable to " + yes + " for " + peer,
                       yes ? new Exception() : null);
     }
 

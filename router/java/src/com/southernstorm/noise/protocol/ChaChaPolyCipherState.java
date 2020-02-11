@@ -27,7 +27,7 @@ import java.util.Arrays;
 import javax.crypto.BadPaddingException;
 import javax.crypto.ShortBufferException;
 
-import com.southernstorm.noise.crypto.ChaChaCore;
+import com.southernstorm.noise.crypto.chacha20.ChaChaCore;
 import com.southernstorm.noise.crypto.Poly1305;
 
 /**
@@ -41,6 +41,10 @@ public class ChaChaPolyCipherState implements CipherState {
 	private final byte[] polyKey;
 	private long n;
 	private boolean haskey;
+	// Debug only
+	private byte[] initialKey;
+
+	private static final boolean DEBUG = false;
 	
 	/**
 	 * Constructs a new cipher state for the "ChaChaPoly" algorithm.
@@ -53,6 +57,20 @@ public class ChaChaPolyCipherState implements CipherState {
 		polyKey = new byte [32];
 		n = 0;
 		haskey = false;
+	}
+
+	/**
+	 * Copy constructor for cloning
+	 * @since 0.9.44
+	 */
+	protected ChaChaPolyCipherState(ChaChaPolyCipherState o) throws CloneNotSupportedException {
+		poly = o.poly.clone();
+		input = Arrays.copyOf(o.input, o.input.length);
+		output = Arrays.copyOf(o.output, o.output.length);
+		polyKey = Arrays.copyOf(o.polyKey, o.polyKey.length);
+		n = o.n;
+		haskey = o.haskey;
+		initialKey = o.initialKey;
 	}
 
 	@Override
@@ -80,6 +98,10 @@ public class ChaChaPolyCipherState implements CipherState {
 
 	@Override
 	public void initializeKey(byte[] key, int offset) {
+		if (DEBUG) {
+			initialKey = new byte[32];
+			System.arraycopy(key, 0, initialKey, 0, 32);
+		}
 		ChaChaCore.initKey256(input, key, offset);
 		n = 0;
 		haskey = true;
@@ -88,45 +110,6 @@ public class ChaChaPolyCipherState implements CipherState {
 	@Override
 	public boolean hasKey() {
 		return haskey;
-	}
-
-	/**
-	 * XOR's the output of ChaCha20 with a byte buffer.
-	 * 
-	 * @param input The input byte buffer.
-	 * @param inputOffset The offset of the first input byte.
-	 * @param output The output byte buffer (can be the same as the input).
-	 * @param outputOffset The offset of the first output byte.
-	 * @param length The number of bytes to XOR between 1 and 64.
-	 * @param block The ChaCha20 output block.
-	 */
-	private static void xorBlock(byte[] input, int inputOffset, byte[] output, int outputOffset, int length, int[] block)
-	{
-		int posn = 0;
-		int value;
-		while (length >= 4) {
-			value = block[posn++];
-			output[outputOffset] = (byte)(input[inputOffset] ^ value);
-			output[outputOffset + 1] = (byte)(input[inputOffset + 1] ^ (value >> 8));
-			output[outputOffset + 2] = (byte)(input[inputOffset + 2] ^ (value >> 16));
-			output[outputOffset + 3] = (byte)(input[inputOffset + 3] ^ (value >> 24));
-			inputOffset += 4;
-			outputOffset += 4;
-			length -= 4;
-		}
-		if (length == 3) {
-			value = block[posn];
-			output[outputOffset] = (byte)(input[inputOffset] ^ value);
-			output[outputOffset + 1] = (byte)(input[inputOffset + 1] ^ (value >> 8));
-			output[outputOffset + 2] = (byte)(input[inputOffset + 2] ^ (value >> 16));
-		} else if (length == 2) {
-			value = block[posn];
-			output[outputOffset] = (byte)(input[inputOffset] ^ value);
-			output[outputOffset + 1] = (byte)(input[inputOffset + 1] ^ (value >> 8));
-		} else if (length == 1) {
-			value = block[posn];
-			output[outputOffset] = (byte)(input[inputOffset] ^ value);
-		}
 	}
 	
 	/**
@@ -141,7 +124,7 @@ public class ChaChaPolyCipherState implements CipherState {
 		ChaChaCore.initIV(input, n++);
 		ChaChaCore.hash(output, input);
 		Arrays.fill(polyKey, (byte)0);
-		xorBlock(polyKey, 0, polyKey, 0, 32, output);
+		ChaChaCore.xorBlock(polyKey, 0, polyKey, 0, 32, output);
 		poly.reset(polyKey, 0);
 		if (ad != null) {
 			poly.update(ad, 0, ad.length);
@@ -201,7 +184,7 @@ public class ChaChaPolyCipherState implements CipherState {
 			if (tempLen > length)
 				tempLen = length;
 			ChaChaCore.hash(output, input);
-			xorBlock(plaintext, plaintextOffset, ciphertext, ciphertextOffset, tempLen, output);
+			ChaChaCore.xorBlock(plaintext, plaintextOffset, ciphertext, ciphertextOffset, tempLen, output);
 			if (++(input[12]) == 0)
 				++(input[13]);
 			plaintextOffset += tempLen;
@@ -289,6 +272,15 @@ public class ChaChaPolyCipherState implements CipherState {
 	}
 
 	/**
+	 *  I2P
+	 *  @since 0.9.44
+	 */
+	@Override
+	public ChaChaPolyCipherState clone() throws CloneNotSupportedException {
+		return new ChaChaPolyCipherState(this);
+	}
+
+	/**
 	 *  I2P debug
 	 */
 	@Override
@@ -297,6 +289,15 @@ public class ChaChaPolyCipherState implements CipherState {
 		buf.append("  Cipher State:\n" +
 		           "    nonce: ");
 		buf.append(n);
+		// I2P debug
+		if (DEBUG) {
+			buf.append("\n" +
+			           "    init key: ");
+			if (haskey)
+				buf.append(net.i2p.data.Base64.encode(initialKey));
+			else
+				buf.append("null");
+		}
 		buf.append("\n    poly key: ");
 		if (haskey)
 			buf.append(net.i2p.data.Base64.encode(polyKey));

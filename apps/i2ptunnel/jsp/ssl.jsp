@@ -1,13 +1,4 @@
-<%
-    // NOTE: Do the header carefully so there is no whitespace before the <?xml... line
-
-    response.setHeader("X-Frame-Options", "SAMEORIGIN");
-    response.setHeader("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'");
-    response.setHeader("X-XSS-Protection", "1; mode=block");
-    response.setHeader("X-Content-Type-Options", "nosniff");
-    response.setHeader("Referrer-Policy", "no-referrer");
-    response.setHeader("Accept-Ranges", "none");
-
+<%@include file="headers.jsi"
 %><%@page pageEncoding="UTF-8"
 %><%@page contentType="text/html" import="java.io.File,java.io.IOException,net.i2p.crypto.KeyStoreUtil,net.i2p.data.DataHelper,net.i2p.jetty.JettyXmlConfigurationParser"
 %><%@page
@@ -155,7 +146,7 @@ input.default { width: 1px; height: 1px; visibility: hidden; }
             if (kspw != null) {
                 kspw = JettyXmlConfigurationParser.deobfuscate(kspw);
             } else {
-                kspw = net.i2p.crypto.KeyStoreUtil.DEFAULT_KEYSTORE_PASSWORD;
+                kspw = KeyStoreUtil.DEFAULT_KEYSTORE_PASSWORD;
             }
             if (!net.i2p.i2ptunnel.web.IndexBean.haveNonce(nonce)) {
                 msgs.append(intl._t("Invalid form submission, probably because you used the 'back' or 'reload' button on your browser. Please resubmit."))
@@ -186,7 +177,11 @@ input.default { width: 1px; height: 1px; visibility: hidden; }
                         altNames.add("www." + name);
                     if (altb32 != null && altb32.length() > 0)
                         altNames.add(altb32);
-                    altNames.addAll(spoofs.values());
+                    for (String s : spoofs.values()) {
+                         // only add if apparently local, don't expose IP if routed externally
+                         if (s.startsWith("127.") || s.startsWith("192.168.") || s.startsWith("10."))
+                             altNames.add(s);
+                    }
                     File ks = new File(ksPath);
                     if (ks.exists()) {
                         // old ks if any must be moved or deleted, as any keys
@@ -202,8 +197,8 @@ input.default { width: 1px; height: 1px; visibility: hidden; }
                         boolean haveEC = net.i2p.crypto.SigType.ECDSA_SHA256_P256.isAvailable();
                         String alg = haveEC ? "EC" : "RSA";
                         int sz = haveEC ? 256 : 2048;
-                        Object[] rv = net.i2p.crypto.KeyStoreUtil.createKeysAndCRL(ks, kspw, "eepsite", name, altNames, b32,
-                                                                                   3652, alg, sz, newpw);
+                        Object[] rv = KeyStoreUtil.createKeysAndCRL(ks, kspw, "eepsite", name, altNames, b32,
+                                                                    3652, alg, sz, newpw);
                         msgs.append("Created selfsigned cert\n");
                         // save cert
                         java.security.cert.X509Certificate cert = (java.security.cert.X509Certificate) rv[2];
@@ -281,7 +276,16 @@ input.default { width: 1px; height: 1px; visibility: hidden; }
                 boolean addssl = ok && !isSSLEnabled && !action.equals("Disable");
                 boolean delssl = ok && isSSLEnabled && action.equals("Disable");
                 if (addssl || delssl) {
-                    File f = new File(ctx.getConfigDir(), "clients.config");
+                    String configfile = request.getParameter("clientConfigFile");
+                    File f;
+                    if (configfile == null || configfile.equals("clients.config")) {
+                        f = new File(ctx.getConfigDir(), "clients.config");
+                    } else if (configfile.contains("/") || configfile.contains("\\")) {
+                        throw new IllegalArgumentException();
+                    } else {
+                        f = new File(ctx.getConfigDir(), "clients.config.d");
+                        f = new File(f, configfile);
+                    }
                     java.util.Properties p = new net.i2p.util.OrderedProperties();
                     try {
                         DataHelper.loadProps(p, f);
@@ -507,11 +511,11 @@ input.default { width: 1px; height: 1px; visibility: hidden; }
        } else {
            valid = true;
 %>
-<tr><td colspan="4"><b><%=intl._t("Base 32")%>:</b> <%=b32%></td></tr>
+<tr><td colspan="4"><b><%=intl._t("Base32")%>:</b> <%=b32%></td></tr>
 <%
     if (altb32 != null && altb32.length() > 0) {
 %>
-        <tr><td><b><%=intl._t("Alt Base 32")%>:</b> <%=altb32%></td></tr>
+        <tr><td><b><%=intl._t("Alt Base32")%>:</b> <%=altb32%></td></tr>
 <%
     }  // altb32
     final String CHECK = "&nbsp;&nbsp;&#x2714;";
@@ -574,15 +578,44 @@ input.default { width: 1px; height: 1px; visibility: hidden; }
     // Now try to find the Jetty server in clients.config
     File configDir = ctx.getConfigDir();
     File clientsConfig = new File(configDir, "clients.config");
+    boolean isSingleFile = clientsConfig.exists();
+    File[] configFiles;
+    if (!isSingleFile) {
+        File clientsConfigD = new File(configDir, "clients.config.d");
+        configFiles = clientsConfigD.listFiles(new net.i2p.util.FileSuffixFilter(".config"));
+    } else {
+        configFiles = null;
+    }
     java.util.Properties clientProps = new java.util.Properties();
     try {
         boolean foundClientConfig = false;
-        DataHelper.loadProps(clientProps, clientsConfig);
-        for (int i = 0; i < 100; i++) {
+        int i = -1;
+        int fileNum = 0;
+        while (true) {
+            if (isSingleFile) {
+                // next config in the file
+                i++;
+                if (i == 0)
+                    DataHelper.loadProps(clientProps, clientsConfig);
+            } else {
+                if (configFiles == null)
+                    break;
+                if (fileNum >= configFiles.length)
+                    break;
+                // load the next file
+                clientProps.clear();
+                clientsConfig = configFiles[fileNum++];
+                DataHelper.loadProps(clientProps, clientsConfig);
+                // only look at client 0 in file
+                i = 0;
+            }
             String prop = "clientApp." + i + ".main";
             String cls = clientProps.getProperty(prop);
-            if (cls == null)
-                break;
+            if (cls == null) {
+                if (isSingleFile)
+                    break;
+                continue;
+            }
             if (!cls.equals("net.i2p.jetty.JettyStart"))
                 continue;
             prop = "clientApp." + i + ".args";
@@ -730,6 +763,7 @@ input.default { width: 1px; height: 1px; visibility: hidden; }
 %>
 <tr><td colspan="4">
 <input type="hidden" name="clientAppNumber" value="<%=i%>" />
+<input type="hidden" name="clientConfigFile" value="<%=clientsConfig.getName()%>" />
 <input type="hidden" name="isSSLEnabled" value="<%=isEnabled%>" />
 <input type="hidden" name="nofilter_ksPath" value="<%=ksPath%>" />
 <input type="hidden" name="nofilter_jettySSLFile" value="<%=jettySSLFile%>" />
@@ -777,7 +811,7 @@ input.default { width: 1px; height: 1px; visibility: hidden; }
 <%
                 break;
             }  // canConfigure
-        }  // for client
+        }  // while (for each client or client file)
         if (!foundClientConfig) {
 %>
 <tr><td colspan="4">Cannot configure, no Jetty server found in <a href="/configclients">client configurations</a> that matches this tunnel</td></tr>

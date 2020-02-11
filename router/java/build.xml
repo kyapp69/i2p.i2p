@@ -5,6 +5,9 @@
     <target name="builddep">
         <!-- run from top level build.xml to get dependencies built -->
     </target>
+    <condition property="no.bundle">
+        <isfalse value="${require.gettext}" />
+    </condition>
     <condition property="depend.available">
         <typefound name="depend" />
     </condition>
@@ -34,6 +37,7 @@
     <!-- only used if not set by a higher build.xml -->
     <property name="javac.compilerargs" value="" />
     <property name="javac.version" value="1.7" />
+    <property name="manifest.classpath.name" value="Class-Path" />
 
     <target name="compile" depends="depend, dependVersion">
         <mkdir dir="./build" />
@@ -41,6 +45,7 @@
         <javac srcdir="./src" debug="true" source="${javac.version}" target="${javac.version}" deprecation="on"
                debuglevel="lines,vars,source"
                includeAntRuntime="false"
+               encoding="UTF-8"
                destdir="./build/obj" classpath="../../core/java/build/obj:../../core/java/build/i2p.jar:../../core/java/build/gnu-getopt.jar:../../core/java/build/httpclient.jar:../../core/java/build/httpcore.jar" >
             <compilerarg line="${javac.compilerargs}" />
         </javac>
@@ -60,13 +65,13 @@
         </exec>
     </target>
 
-    <target name="jar" depends="compile, jarUpToDate, listChangedFiles" unless="jar.uptodate" >
+    <target name="jar" depends="compile, bundle, jarUpToDate, listChangedFiles" unless="jar.uptodate" >
         <!-- set if unset -->
         <property name="workspace.changes.tr" value="" />
         <jar destfile="./build/router.jar" basedir="./build/obj" includes="**/*.class" >
             <manifest>
                 <!-- so people with very old wrapper.config files will still work with Jetty 6 -->
-                <attribute name="Class-Path" value="i2p.jar addressbook.jar jetty-i2p.jar jetty-rewrite-handler.jar jetty-start.jar jetty-util.jar" />
+                <attribute name="${manifest.classpath.name}" value="i2p.jar addressbook.jar jetty-i2p.jar jetty-rewrite-handler.jar jetty-start.jar jetty-util.jar" />
                 <attribute name="Specification-Title" value="I2P Router" />
                 <attribute name="Specification-Version" value="${release.number}" />
                 <attribute name="Specification-Vendor" value="The I2P Project https://geti2p.net/" />
@@ -90,15 +95,85 @@
         </uptodate>
     </target>
 
+    <target name="bundle" unless="no.bundle">
+        <mkdir dir="build/messages-src" />
+        <exec executable="sh" osfamily="unix" failifexecutionfails="true" failonerror="${require.gettext}" >
+            <env key="JAVA_HOME" value="${java.home}" />
+            <arg value="./bundle-messages.sh" />
+        </exec>
+        <exec executable="sh" osfamily="mac" failifexecutionfails="true" failonerror="${require.gettext}" >
+            <arg value="./bundle-messages.sh" />
+        </exec>
+        <exec executable="sh" osfamily="windows" failifexecutionfails="false" >
+            <arg value="./bundle-messages.sh" />
+        </exec>
+        <javac source="${javac.version}" target="${javac.version}" 
+               includeAntRuntime="false"
+               encoding="UTF-8"
+               srcdir="build/messages-src" destdir="build/obj">
+            <compilerarg line="${javac.compilerargs}" />
+        </javac>
+    </target>
+
+    <target name="poupdate">
+        <!-- Update the messages_*.po files.  -->
+        <!-- set if unset -->
+        <property name="lg2" value="" />
+        <exec executable="sh" osfamily="unix" failifexecutionfails="true" failonerror="true" >
+            <env key="LG2" value="${lg2}" />
+            <arg value="./bundle-messages.sh" />
+            <arg value="-p" />
+        </exec>
+        <exec executable="sh" osfamily="mac" failifexecutionfails="true" failonerror="true" >
+            <env key="LG2" value="${lg2}" />
+            <arg value="./bundle-messages.sh" />
+            <arg value="-p" />
+        </exec>
+        <exec executable="sh" osfamily="windows" failifexecutionfails="true" failonerror="true" >
+            <env key="LG2" value="${lg2}" />
+            <arg value="./bundle-messages.sh" />
+            <arg value="-p" />
+        </exec>
+    </target>
+
     <target name="javadoc">
         <mkdir dir="./build" />
         <mkdir dir="./build/javadoc" />
-        <javadoc 
-            sourcepath="./src:./test/junit:../../core/java/src:../../core/java/test/junit" destdir="./build/javadoc" 
-            packagenames="*" 
-            use="true" 
-            splitindex="true" 
-            windowtitle="I2P Router" />
+        <javadoc access="package"
+            source="${javac.version}"
+            destdir="./build/javadoc"
+            packagenames="*"
+            use="true"
+            splitindex="true"
+            failonerror="true"
+            additionalparam="-notimestamp"
+            doctitle="I2P Javadocs for Release ${release.number} Build ${i2p.build.number}${build.extra}"
+            windowtitle="I2P Anonymous Network - Java Documentation - Version ${release.number}">
+            <group title="Router" packages="*" />
+            <sourcepath>
+                <pathelement location="./src" />
+                <pathelement location="./test/junit" />
+            </sourcepath>
+            <classpath>
+                <pathelement location="../../core/java/build/i2p.jar" />
+                <pathelement location="../../core/java/build/i2ptest.jar" />
+                <pathelement location="${hamcrest.home}/hamcrest-core.jar" />
+                <pathelement location="${hamcrest.home}/hamcrest-library.jar" />
+                <pathelement location="${hamcrest.home}/hamcrest-integration.jar" />
+                <pathelement location="${hamcrest.home}/hamcrest-all.jar" />
+                <pathelement location="${junit.home}/junit4.jar" />
+                <!-- following are only for debian builds -->
+                <pathelement location="../../core/java/build/libintl.jar" />
+                <pathelement location="../../core/java/build/gnu-getopt.jar" />
+                <pathelement location="../../core/java/build/json-simple.jar" />
+            </classpath>
+            <!-- These variables are stored in build.properties.
+                  End-users can override by creating the file override.properties -->
+            <link offline="true" href="${javasedocs.url}" packagelistLoc="../../installer/resources/package-lists/java/" />
+            <link offline="true" href="${javaeedocs.url}" packagelistLoc="../../installer/resources/package-lists/javaee/" />
+            <link offline="true" href="${jettydocs.url}" packagelistLoc="../../installer/resources/package-lists/jetty/" />
+            <link offline="true" href="${wrapperdocs.url}" packagelistLoc="../../installer/resources/package-lists/wrapper/" />
+        </javadoc>
     </target>
 
     <!-- for Maven Central -->
@@ -141,7 +216,7 @@
         <mkdir dir="./build/obj_scala" />
         <scalac srcdir="./test/scalatest" destdir="./build/obj_scala" deprecation="on" >
             <classpath>
-                <pathelement location="${javac.classpath}" />
+                <pathelement path="${javac.classpath}" />
                 <pathelement location="${scala-library.jar}" />
                 <pathelement location="${scalactic.jar}" />
                 <pathelement location="${scalatest.jar}" />
@@ -160,8 +235,10 @@
         <javac srcdir="./test/junit" debug="true" source="${javac.version}" target="${javac.version}" deprecation="on"
             debuglevel="lines,vars,source"
             includeAntRuntime="true"
+            encoding="UTF-8"
             destdir="./build/obj">
             <classpath>
+                <pathelement path="${javac.classpath}" />
                 <pathelement location="${hamcrest.home}/hamcrest-core.jar" />
                 <pathelement location="${hamcrest.home}/hamcrest-library.jar" />
                 <pathelement location="${hamcrest.home}/hamcrest-integration.jar" />

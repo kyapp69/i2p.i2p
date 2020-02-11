@@ -25,18 +25,24 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
+import net.i2p.crypto.EncType;
 import net.i2p.crypto.SigType;
+import net.i2p.data.DatabaseEntry;
 import net.i2p.data.DataHelper;
 import net.i2p.data.Destination;
 import net.i2p.data.Hash;
 import net.i2p.data.Lease;
 import net.i2p.data.LeaseSet;
+import net.i2p.data.LeaseSet2;
+import net.i2p.data.PublicKey;
 import net.i2p.data.router.RouterAddress;
 import net.i2p.data.router.RouterInfo;
 import net.i2p.router.RouterContext;
 import net.i2p.router.TunnelPoolSettings;
 import net.i2p.router.util.HashDistance;   // debug
 import net.i2p.router.networkdb.kademlia.FloodfillNetworkDatabaseFacade;
+import static net.i2p.router.sybil.Util.biLog2;
+import net.i2p.router.web.HelperBase;
 import net.i2p.router.web.Messages;
 import net.i2p.router.web.WebAppStarter;
 import net.i2p.util.Log;
@@ -56,13 +62,13 @@ class NetDbRenderer {
      */
     private class LeaseSetComparator implements Comparator<LeaseSet> {
          public int compare(LeaseSet l, LeaseSet r) {
-             Destination dl = l.getDestination();
-             Destination dr = r.getDestination();
+             Hash dl = l.getHash();
+             Hash dr = r.getHash();
              boolean locall = _context.clientManager().isLocal(dl);
              boolean localr = _context.clientManager().isLocal(dr);
              if (locall && !localr) return -1;
              if (localr && !locall) return 1;
-             return dl.calculateHash().toBase64().compareTo(dr.calculateHash().toBase64());
+             return dl.toBase32().compareTo(dr.toBase32());
         }
     }
 
@@ -101,6 +107,9 @@ class NetDbRenderer {
         StringBuilder buf = new StringBuilder(4*1024);
         List<Hash> sybils = sybil != null ? new ArrayList<Hash>(128) : null;
         if (".".equals(routerPrefix)) {
+            buf.append("<table><tr><td class=\"infohelp\">")
+               .append(_t("Never reveal your router identity to anyone, as it is uniquely linked to your IP address in the network database."))
+               .append("</td></tr></table>");
             renderRouterInfo(buf, _context.router().getRouterInfo(), true, true);
         } else {
             StringBuilder ubuf = new StringBuilder();
@@ -173,7 +182,8 @@ class NetDbRenderer {
                     (version != null && version.equals(ri.getVersion())) ||
                     (country != null && country.equals(_context.commSystem().getCountry(key))) ||
                     (family != null && family.equals(ri.getOption("family"))) ||
-                    (caps != null && ri.getCapabilities().contains(caps)) ||
+                    // 'O' will catch PO and XO also
+                    (caps != null && hasCap(ri, caps)) ||
                     (tr != null && ri.getTargetAddress(tr) != null) ||
                     (type != null && type == ri.getIdentity().getSigType())) {
                     if (skipped < toSkip) {
@@ -358,6 +368,22 @@ class NetDbRenderer {
     }
 
     /**
+     *  Special handling for 'O' cap
+     *  @param caps non-null
+     *  @since 0.9.38
+     */
+    private static boolean hasCap(RouterInfo ri, String caps) {
+        String ricaps = ri.getCapabilities();
+        if (caps.equals("O")) {
+            return ricaps.contains(caps) &&
+                   !ricaps.contains("P") &&
+                   !ricaps.contains("X");
+        } else {
+            return ricaps.contains(caps);
+        }
+    }
+
+    /**
      *  @param debug @since 0.7.14 sort by distance from us, display
      *               median distance, and other stuff, useful when floodfill
      */
@@ -425,14 +451,16 @@ class NetDbRenderer {
           long now = _context.clock().now();
           buf.append("<div class=\"leasesets_container\">");
           for (LeaseSet ls : leases) {
+            // warning - will be null for non-local encrypted
             Destination dest = ls.getDestination();
-            Hash key = dest.calculateHash();
+            Hash key = ls.getHash();
             buf.append("<table class=\"leaseset\">\n")
                .append("<tr><th><b>").append(_t("LeaseSet")).append(":</b>&nbsp;<code>").append(key.toBase64()).append("</code>");
-            if (_context.keyRing().get(key) != null)
-                buf.append(" (").append(_t("Encrypted")).append(')');
+            int type = ls.getType();
+            if (type == DatabaseEntry.KEY_TYPE_ENCRYPTED_LS2 || _context.keyRing().get(key) != null)
+                buf.append(" <b>(").append(_t("Encrypted")).append(")</b>");
             buf.append("</th>");
-            if (_context.clientManager().isLocal(dest)) {
+            if (_context.clientManager().isLocal(key)) {
                 buf.append("<th><a href=\"tunnels#" + key.toBase64().substring(0,4) + "\">" + _t("Local") + "</a> ");
                 boolean unpublished = ! _context.clientManager().shouldPublishLeaseSet(key);
                 if (unpublished)
@@ -443,53 +471,70 @@ class NetDbRenderer {
                     buf.append(in.getDestinationNickname());
                 else
                     buf.append(dest.toBase64().substring(0, 6));
-                buf.append("</th></tr>\n<tr><td");
-                // If the dest is published but not in the addressbook, an extra
-                // <td> is appended with an "Add to addressbook" link, so this
-                // <td> should not span 2 columns.
-                String host = null;
-                if (!unpublished) {
-                    host = _context.namingService().reverseLookup(dest);
-                }
-                if (unpublished || host != null || !linkSusi) {
-                    buf.append(" colspan=\"2\"");
-                }
-                buf.append(">");
-                String b32 = dest.toBase32();
-                buf.append("<a href=\"http://").append(b32).append("\">").append(b32).append("</a></td>");
-                if (linkSusi && !unpublished) {
-                    if (host == null) {
+                buf.append("</th></tr>\n");
+                // we don't show a b32 or addressbook links if encrypted
+                if (type != DatabaseEntry.KEY_TYPE_ENCRYPTED_LS2) {
+                    buf.append("<tr><td");
+                    // If the dest is published but not in the addressbook, an extra
+                    // <td> is appended with an "Add to addressbook" link, so this
+                    // <td> should not span 2 columns.
+                    String host = null;
+                    if (!unpublished) {
+                        host = _context.namingService().reverseLookup(dest);
+                    }
+                    if (unpublished || host != null || !linkSusi) {
+                        buf.append(" colspan=\"2\"");
+                    }
+                    buf.append(">");
+                    String b32 = key.toBase32();
+                    buf.append("<a href=\"http://").append(b32).append("\">").append(b32).append("</a></td>");
+                    if (linkSusi && !unpublished && host == null) {
                         buf.append("<td class=\"addtobook\" colspan=\"2\">").append("<a title=\"").append(_t("Add to addressbook"))
                            .append("\" href=\"/susidns/addressbook.jsp?book=private&amp;destination=")
                            .append(dest.toBase64()).append("#add\">").append(_t("Add to local addressbook")).append("</a></td>");
-                    }
-                } // else probably a client
+                    } // else probably a client
+                }
             } else {
                 buf.append("<th><b>").append(_t("Destination")).append(":</b> ");
-                String host = _context.namingService().reverseLookup(dest);
+                String host = (dest != null) ? _context.namingService().reverseLookup(dest) : null;
                 if (host != null) {
                     buf.append("<a href=\"http://").append(host).append("/\">").append(host).append("</a></th>");
                 } else {
-                    String b32 = dest.toBase32();
-                    buf.append("<code>").append(dest.toBase64().substring(0, 6)).append("</code></th>")
-                       .append("</tr>\n<tr><td");
+                    String b32 = key.toBase32();
+                    buf.append("<code>");
+                    if (dest != null)
+                        buf.append(dest.toBase64().substring(0, 6));
+                    else
+                        buf.append("n/a");
+                    buf.append("</code></th>" +
+                               "</tr>\n<tr><td");
                     if (!linkSusi)
                         buf.append(" colspan=\"2\"");
                     buf.append("><a href=\"http://").append(b32).append("\">").append(b32).append("</a></td>\n");
-                    if (linkSusi) {
+                    if (linkSusi && dest != null) {
                        buf.append("<td class=\"addtobook\"><a title=\"").append(_t("Add to addressbook"))
                        .append("\" href=\"/susidns/addressbook.jsp?book=private&amp;destination=")
                        .append(dest.toBase64()).append("#add\">").append(_t("Add to local addressbook")).append("</a></td>");
                     }
                 }
             }
-            buf.append("</tr>\n<tr><td colspan=\"2\">\n");
-            long exp = ls.getLatestLeaseDate()-now;
+            long exp;
+            if (type == DatabaseEntry.KEY_TYPE_LEASESET) {
+                exp = ls.getLatestLeaseDate() - now;
+            } else {
+                LeaseSet2 ls2 = (LeaseSet2) ls;
+                long pub = now - ls2.getPublished();
+                buf.append("</tr>\n<tr><td colspan=\"2\">\n<b>")
+                   .append(_t("Published {0} ago", DataHelper.formatDuration2(pub)))
+                   .append("</b>");
+                exp = ((LeaseSet2)ls).getExpires()-now;
+            }
+            buf.append("</tr>\n<tr><td colspan=\"2\">\n<b>");
             if (exp > 0)
-                buf.append("<b>").append(_t("Expires in {0}", DataHelper.formatDuration2(exp))).append("</b>");
+                buf.append(_t("Expires in {0}", DataHelper.formatDuration2(exp)));
             else
-                buf.append("<b>").append(_t("Expired {0} ago", DataHelper.formatDuration2(0-exp))).append("</b>");
-            buf.append("</td></tr>\n");
+                buf.append(_t("Expired {0} ago", DataHelper.formatDuration2(0-exp)));
+            buf.append("</b></td></tr>\n");
             if (debug) {
                 buf.append("<tr><td colspan=\"2\">");
                 buf.append("<b>RAP?</b> ").append(ls.getReceivedAsPublished());
@@ -500,24 +545,60 @@ class NetDbRenderer {
                         median = dist;
                 }
                 buf.append("&nbsp;&nbsp;<b>Distance: </b>").append(fmt.format(biLog2(dist)));
+                buf.append("&nbsp;&nbsp;<b>Type: </b>").append(type);
+                if (type != DatabaseEntry.KEY_TYPE_LEASESET) {
+                    LeaseSet2 ls2 = (LeaseSet2) ls;
+                    buf.append("&nbsp;&nbsp;<b>Unpublished? </b>").append(ls2.isUnpublished());
+                    boolean isOff = ls2.isOffline();
+                    buf.append("&nbsp;&nbsp;<b>Offline signed? </b>").append(isOff);
+                    if (isOff)
+                        buf.append("&nbsp;&nbsp;<b>Type: </b>").append(ls2.getTransientSigningKey().getType());
+                }
                 buf.append("</td></tr>\n<tr><td colspan=\"2\">");
                 //buf.append(dest.toBase32()).append("<br>");
-                buf.append("<b>Signature type:</b> ").append(dest.getSigningPublicKey().getType());
-                buf.append("&nbsp;&nbsp;<b>Encryption Key:</b> ").append(ls.getEncryptionKey().toBase64().substring(0, 20)).append("&hellip;");
+                buf.append("<b>Signature type:</b> ");
+                if (dest != null && type != DatabaseEntry.KEY_TYPE_ENCRYPTED_LS2) {
+                    buf.append(dest.getSigningPublicKey().getType());
+                } else {
+                    // encrypted, show blinded key type
+                    buf.append(ls.getSigningKey().getType());
+                }
+                if (type == DatabaseEntry.KEY_TYPE_LEASESET) {
+                    buf.append("</td></tr>\n<tr><td colspan=\"2\"><b>Encryption Key:</b> ELGAMAL_2048 ")
+                       .append(ls.getEncryptionKey().toBase64().substring(0, 20))
+                       .append("&hellip;");
+                } else if (type == DatabaseEntry.KEY_TYPE_LS2) {
+                    LeaseSet2 ls2 = (LeaseSet2) ls;
+                    for (PublicKey pk : ls2.getEncryptionKeys()) {
+                        buf.append("</td></tr>\n<tr><td colspan=\"2\"><b>Encryption Key:</b> ");
+                        EncType etype = pk.getType();
+                        if (etype != null)
+                            buf.append(etype);
+                        else
+                            buf.append("Unsupported type ").append(pk.getUnknownTypeCode());
+                        buf.append(' ')
+                           .append(pk.toBase64().substring(0, 20))
+                           .append("&hellip;");
+                    }
+                }
                 buf.append("</td></tr>\n<tr><td colspan=\"2\">");
                 buf.append("<b>Routing Key:</b> ").append(ls.getRoutingKey().toBase64());
                 buf.append("</td></tr>");
 
             }
             buf.append("<tr><td colspan=\"2\"><ul class=\"netdb_leases\">");
+            boolean isMeta = ls.getType() == DatabaseEntry.KEY_TYPE_META_LS2;
             for (int i = 0; i < ls.getLeaseCount(); i++) {
                 Lease lease = ls.getLease(i);
                 buf.append("<li><b>").append(_t("Lease")).append(' ').append(i + 1).append(":</b> <span class=\"netdb_gateway\" title=\"")
                    .append(_t("Gateway")).append("\"><img src=\"themes/console/images/info/gateway.png\" alt=\"")
                    .append(_t("Gateway")).append("\"></span> <span class=\"tunnel_peer\">");
                 buf.append(_context.commSystem().renderPeerHTML(lease.getGateway()));
-                buf.append("</span> <span class=\"netdb_tunnel\">").append(_t("Tunnel")).append(" <span class=\"tunnel_id\">")
-                   .append(lease.getTunnelId().getTunnelId()).append("</span></span> ");
+                buf.append("</span> ");
+                if (!isMeta) {
+                    buf.append("<span class=\"netdb_tunnel\">").append(_t("Tunnel")).append(" <span class=\"tunnel_id\">")
+                       .append(lease.getTunnelId().getTunnelId()).append("</span></span> ");
+                }
                 if (debug) {
                     long exl = lease.getEndDate().getTime() - now;
                     if (exl > 0)
@@ -553,23 +634,6 @@ class NetDbRenderer {
         }  // !empty
         out.write(buf.toString());
         out.flush();
-    }
-
-    /**
-     * For debugging
-     * http://forums.sun.com/thread.jspa?threadID=597652
-     * @since 0.7.14
-     */
-    public static double biLog2(BigInteger a) {
-        int b = a.bitLength() - 1;
-        double c = 0;
-        double d = 0.5;
-        for (int i = b; i >= 0; --i) {
-             if (a.testBit(i))
-                 c += d;
-             d /= 2;
-        }
-        return b + c;
     }
 
     /**
@@ -668,10 +732,11 @@ class NetDbRenderer {
             }
             buf.append("</div>");
         }
-        long end = System.currentTimeMillis();
-        if (log.shouldWarn())
+        if (log.shouldWarn()) {
+            long end = System.currentTimeMillis();
             log.warn("part 1 took " + (end - start));
-        start = end;
+            start = end;
+        }
 
      //
      // don't bother to reindent
@@ -699,29 +764,34 @@ class NetDbRenderer {
         buf.append("</td><td style=\"vertical-align: top;\">");
         out.write(buf.toString());
         buf.setLength(0);
-        end = System.currentTimeMillis();
-        if (log.shouldWarn())
+        if (log.shouldWarn()) {
+            long end = System.currentTimeMillis();
             log.warn("part 2 took " + (end - start));
-        start = end;
+            start = end;
+        }
 
         // transports table
-        buf.append("<table id=\"netdbtransports\">\n");
-        buf.append("<tr><th align=\"left\">" + _t("Transports") + "</th><th>" + _t("Count") + "</th></tr>\n");
-        for (int i = 0; i < TNAMES.length; i++) {
-            int num = transportCount[i];
-            if (num > 0) {
-                buf.append("<tr><td>").append(_t(TNAMES[i]));
-                buf.append("</td><td align=\"center\">").append(num).append("</td></tr>\n");
+        boolean showTransports = _context.getBooleanProperty(HelperBase.PROP_ADVANCED);
+        if (showTransports) {
+            buf.append("<table id=\"netdbtransports\">\n");
+            buf.append("<tr><th align=\"left\">" + _t("Transports") + "</th><th>" + _t("Count") + "</th></tr>\n");
+            for (int i = 0; i < TNAMES.length; i++) {
+                int num = transportCount[i];
+                if (num > 0) {
+                    buf.append("<tr><td>").append(_t(TNAMES[i]));
+                    buf.append("</td><td align=\"center\">").append(num).append("</td></tr>\n");
+                }
+            }
+            buf.append("</table>\n");
+            buf.append("</td><td style=\"vertical-align: top;\">");
+            out.write(buf.toString());
+            buf.setLength(0);
+            if (log.shouldWarn()) {
+                long end = System.currentTimeMillis();
+                log.warn("part 3 took " + (end - start));
+                start = end;
             }
         }
-        buf.append("</table>\n");
-        buf.append("</td><td style=\"vertical-align: top;\">");
-        out.write(buf.toString());
-        buf.setLength(0);
-        end = System.currentTimeMillis();
-        if (log.shouldWarn())
-            log.warn("part 3 took " + (end - start));
-        start = end;
 
         // country table
         List<String> countryList = new ArrayList<String>(countries.objects());
@@ -741,10 +811,10 @@ class NetDbRenderer {
         }
 
         buf.append("</td></tr></table>");
-        end = System.currentTimeMillis();
-        if (log.shouldWarn())
+        if (log.shouldWarn()) {
+            long end = System.currentTimeMillis();
             log.warn("part 4 took " + (end - start));
-        start = end;
+        }
 
      //
      // don't bother to reindent
@@ -781,6 +851,27 @@ class NetDbRenderer {
          public int compare(String l, String r) {
              return coll.compare(getTranslatedCountry(l),
                                  getTranslatedCountry(r));
+        }
+    }
+
+    /**
+     *  Sort by style, then host
+     *  @since 0.9.38
+     */
+    static class RAComparator implements Comparator<RouterAddress> {
+         private static final long serialVersionUID = 1L;
+
+         public int compare(RouterAddress l, RouterAddress r) {
+             int rv = l.getTransportStyle().compareTo(r.getTransportStyle());
+             if (rv != 0)
+                 return rv;
+             String lh = l.getHost();
+             String rh = r.getHost();
+             if (lh == null)
+                 return (rh == null) ? 0 : -1;
+             if (rh == null)
+                 return 1;
+             return lh.compareTo(rh);
         }
     }
 
@@ -836,7 +927,13 @@ class NetDbRenderer {
         if (addrs.isEmpty()) {
             buf.append(_t("none"));
         } else {
-            for (RouterAddress addr : info.getAddresses()) {
+            if (addrs.size() > 1) {
+                // addrs is unmodifiable
+                List<RouterAddress> laddrs = new ArrayList<RouterAddress>(addrs);
+                Collections.sort(laddrs, new RAComparator());
+                addrs = laddrs;
+            }
+            for (RouterAddress addr : addrs) {
                 String style = addr.getTransportStyle();
                 buf.append("<br><b class=\"netdb_transport\">").append(DataHelper.stripHTML(style)).append(":</b>");
                 int cost = addr.getCost();

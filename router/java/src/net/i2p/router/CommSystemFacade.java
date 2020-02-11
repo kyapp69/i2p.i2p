@@ -16,11 +16,13 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+import net.i2p.I2PAppContext;
 import net.i2p.data.Hash;
 import net.i2p.data.router.RouterAddress;
 import net.i2p.data.router.RouterInfo;
 import net.i2p.router.transport.Transport;
 import net.i2p.router.transport.crypto.DHSessionKeyBuilder;
+import net.i2p.util.Translate;
 
 /**
  * Manages the communication subsystem between peers, including connections, 
@@ -28,6 +30,10 @@ import net.i2p.router.transport.crypto.DHSessionKeyBuilder;
  *
  */ 
 public abstract class CommSystemFacade implements Service {
+
+    /** @since 0.9.45 */
+    protected static final String ROUTER_BUNDLE_NAME = "net.i2p.router.util.messages";
+
     public abstract void processMessage(OutNetMessage msg);
     
     public void renderStatusHTML(Writer out, String urlBase, int sortFlags) throws IOException { }
@@ -84,6 +90,14 @@ public abstract class CommSystemFacade implements Service {
     public Status getStatus() { return Status.OK; }
 
     /**
+     * getStatus().toStatusString(), translated if available.
+     * @since 0.9.45
+     */
+    public String getLocalizedStatusString() {
+        return getStatus().toStatusString();
+    }
+
+    /**
      * @deprecated unused
      */
     @Deprecated
@@ -102,18 +116,25 @@ public abstract class CommSystemFacade implements Service {
      * @since 0.9.24
      */
     public void mayDisconnect(Hash peer) {}
+    
+    /**
+     * Tell the comm system to disconnect from this peer.
+     *
+     * @since 0.9.38
+     */
+    public void forceDisconnect(Hash peer) {}
 
     /** @since 0.8.11 */
     public String getOurCountry() { return null; }
 
     /** @since 0.8.13 */
-    public boolean isInBadCountry() { return false; }
+    public boolean isInStrictCountry() { return false; }
 
     /** @since 0.9.16 */
-    public boolean isInBadCountry(Hash peer) { return false; }
+    public boolean isInStrictCountry(Hash peer) { return false; }
 
     /** @since 0.9.16 */
-    public boolean isInBadCountry(RouterInfo ri) { return false; }
+    public boolean isInStrictCountry(RouterInfo ri) { return false; }
 
     public String getCountry(Hash peer) { return null; }
     public String getCountryName(String code) { return code; }
@@ -176,6 +197,12 @@ public abstract class CommSystemFacade implements Service {
      *  @since 0.9.16
      */
     public DHSessionKeyBuilder.Factory getDHFactory() { return null; }
+
+    /**
+     *  Router must call after netdb is initialized
+     *  @since 0.9.41
+     */
+    public void initGeoIP() {}
 
     /*
      *  Reachability status codes
@@ -397,8 +424,6 @@ public abstract class CommSystemFacade implements Service {
 
                         case DIFFERENT:
                         case REJECT_UNSOLICITED:
-                            return newStatus;
-
                         case IPV4_DISABLED_IPV6_FIREWALLED:
                             return IPV4_OK_IPV6_FIREWALLED;
 
@@ -622,6 +647,14 @@ public abstract class CommSystemFacade implements Service {
          */
         public String toStatusString() {
             return status;
+        }
+
+        /**
+         * toStatusString(), translated if available.
+         * @since 0.9.45
+         */
+        public String toLocalizedStatusString(I2PAppContext ctx) {
+            return Translate.getString(status, ctx, ROUTER_BUNDLE_NAME);
         }
 
         @Override

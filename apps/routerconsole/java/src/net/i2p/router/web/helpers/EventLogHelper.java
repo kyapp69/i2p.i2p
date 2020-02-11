@@ -1,14 +1,10 @@
 package net.i2p.router.web.helpers;
 
 import java.io.IOException;
-import java.io.Writer;
 import java.text.Collator;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,13 +14,13 @@ import net.i2p.data.DataHelper;
 import net.i2p.router.util.EventLog;
 import net.i2p.router.web.CSSHelper;
 import net.i2p.router.web.FormHandler;
+import net.i2p.router.web.HelperBase;
 import net.i2p.util.SystemVersion;
 
 /**
  *  /events.jsp
  */
 public class EventLogHelper extends FormHandler {
-    protected Writer _out;
     private long _from, _age;
     //private long _to = Long.MAX_VALUE;
     private String _event = ALL;
@@ -63,6 +59,8 @@ public class EventLogHelper extends FormHandler {
         _xevents = new HashMap<String, String>(1 + (_events.length / 2));
     }
 
+    protected void processForm() {}
+
     /** set the defaults after we have a context */
     @Override
     public void setContextId(String contextId) {
@@ -72,8 +70,6 @@ public class EventLogHelper extends FormHandler {
         }
     }
     
-    public void storeWriter(Writer out) { _out = out; }
-
     public void setFrom(String s) { 
         try {
             _age = Long.parseLong(s);
@@ -133,7 +129,7 @@ public class EventLogHelper extends FormHandler {
          _out.write(val);
          _out.write("\"");
          if (val.equals(_event))
-             _out.write(" selected=\"selected\"");
+             _out.write(HelperBase.SELECTED);
          _out.write(">");
          _out.write(key);
          _out.write("</option>\n");
@@ -144,7 +140,7 @@ public class EventLogHelper extends FormHandler {
          _out.write(Long.toString(age));
          _out.write("\"");
          if (age == _age)
-             _out.write(" selected=\"selected\"");
+             _out.write(HelperBase.SELECTED);
          _out.write(">");
          if (age == 0)
              _out.write(_t("All events"));
@@ -189,17 +185,13 @@ public class EventLogHelper extends FormHandler {
         }
         buf.append("</th></tr>");
 
-        SimpleDateFormat fmt = (SimpleDateFormat) DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM);
-        // the router sets the JVM time zone to UTC but saves the original here so we can get it
-        fmt.setTimeZone(SystemVersion.getSystemTimeZone(_context));
-
         List<Map.Entry<Long, String>> entries = new ArrayList<Map.Entry<Long, String>>(events.entrySet());
         Collections.reverse(entries);
         for (Map.Entry<Long, String> e : entries) {
             long time = e.getKey().longValue();
             String event = e.getValue();
             buf.append("<tr><td>");
-            buf.append(fmt.format(new Date(time)));
+            buf.append(DataHelper.formatTime(time));
             buf.append("</td><td>");
             if (isAll) {
                  String[] s = DataHelper.split(event, " ", 2);

@@ -12,9 +12,9 @@ import java.util.Map;
 
 import gnu.getopt.Getopt;
 
-import net.minidev.json.JSONArray;
-import net.minidev.json.JSONObject;
-import net.minidev.json.parser.JSONParser;
+import org.json.simple.JSONArray;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
 
 import net.i2p.I2PAppContext;
 import net.i2p.data.DataHelper;
@@ -63,9 +63,10 @@ public class DNSOverHTTPS implements EepGet.StatusListener {
     static {
         // Warning: All hostnames MUST be in loop check in lookup() below
         // Google
-        // Certs for 8.8.8.8 and 8.8.4.4 don't work
-        v4urls.add("https://dns.google.com/resolve?edns_client_subnet=0.0.0.0/0&");
-        v6urls.add("https://dns.google.com/resolve?edns_client_subnet=0.0.0.0/0&");
+        // https://developers.google.com/speed/public-dns/docs/doh/
+        // 8.8.8.8 and 8.8.4.4 now redirect to dns.google, but SSLEepGet doesn't support redirect
+        v4urls.add("https://dns.google/resolve?edns_client_subnet=0.0.0.0/0&");
+        v6urls.add("https://dns.google/resolve?edns_client_subnet=0.0.0.0/0&");
         // Cloudflare cloudflare-dns.com
         // https://developers.cloudflare.com/1.1.1.1/nitty-gritty-details/
         // 1.1.1.1 is a privacy centric resolver so it does not send any client IP information
@@ -74,6 +75,12 @@ public class DNSOverHTTPS implements EepGet.StatusListener {
         v4urls.add("https://1.0.0.1/dns-query?ct=application/dns-json&");
         v6urls.add("https://[2606:4700:4700::1111]/dns-query?ct=application/dns-json&");
         v6urls.add("https://[2606:4700:4700::1001]/dns-query?ct=application/dns-json&");
+        // Quad9
+        // https://quad9.net/doh-quad9-dns-servers/
+        v4urls.add("https://9.9.9.9:5053/dns-query?");
+        v4urls.add("https://149.112.112.112:5053/dns-query?");
+        v6urls.add("https://[2620:fe::fe]:5053/dns-query?");
+        v6urls.add("https://[2620:fe::fe:9]:5053/dns-query?");
     }
 
     // keep the timeout very short, as we try multiple addresses,
@@ -98,7 +105,7 @@ public class DNSOverHTTPS implements EepGet.StatusListener {
         _log = ctx.logManager().getLog(DNSOverHTTPS.class);
         state = sslState;
         baos = new ByteArrayOutputStream(512);
-        parser = new JSONParser(JSONParser.MODE_PERMISSIVE);
+        parser = new JSONParser();
     }
 
     public enum Type { V4_ONLY, V6_ONLY, V4_PREFERRED, V6_PREFERRED }
@@ -138,7 +145,7 @@ public class DNSOverHTTPS implements EepGet.StatusListener {
             }
         }
         // don't loop via SSLEepGet
-        if (host.equals("dns.google.com"))
+        if (host.equals("dns.google"))
             return "8.8.8.8";
         if (type == Type.V4_ONLY || type == Type.V4_PREFERRED) {
             // v4 lookup
@@ -255,12 +262,13 @@ public class DNSOverHTTPS implements EepGet.StatusListener {
             log("Got response in " + (end - fetchStart) + "ms");
             byte[] b = baos.toByteArray();
             try {
-                JSONObject map = (JSONObject) parser.parse(b);
+                String s = new String(b, "ISO-8859-1");
+                JSONObject map = (JSONObject) parser.parse(s);
                 if (map == null) {
                     log("No map");
                     return null;
                 }
-                Integer status = (Integer) map.get("Status");
+                Number status = (Number) map.get("Status");
                 if (status == null || status.intValue() != 0) {
                     log("Bad status: " + status);
                     return null;
@@ -280,7 +288,7 @@ public class DNSOverHTTPS implements EepGet.StatusListener {
                             log("no data");
                             continue;
                         }
-                        Integer typ = (Integer) a.get("type");
+                        Number typ = (Number) a.get("type");
                         if (typ == null)
                             continue;
                         String name = (String) a.get("name");
@@ -314,7 +322,7 @@ public class DNSOverHTTPS implements EepGet.StatusListener {
                             log("name mismatch: " + name);
                             continue;
                         }
-                        Integer ttl = (Integer) a.get("TTL");
+                        Number ttl = (Number) a.get("TTL");
                         int ittl = (ttl != null) ? Math.min(ttl.intValue(), MAX_TTL) : 3600;
                         long expires = end + (ittl * 1000L);
                         Map<String, Result> cache = isv6 ? v6Cache : v4Cache;

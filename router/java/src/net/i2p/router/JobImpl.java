@@ -20,7 +20,6 @@ public abstract class JobImpl implements Job {
     private final JobTiming _timing;
     private static final AtomicLong _idSrc = new AtomicLong();
     private final long _id;
-    //private Exception _addedBy;
     private volatile long _madeReadyOn;
     
     public JobImpl(RouterContext context) {
@@ -44,22 +43,12 @@ public abstract class JobImpl implements Job {
     
     /**
      *  @deprecated
-     *  As of 0.8.1, this is a noop, as it just adds classes to the log manager
-     *  class list for no good reason. Logging in jobs is almost always
-     *  set explicitly rather than by class name.
-     */
-    @Deprecated
-    void addedToQueue() {
-        //if (_context.logManager().getLog(getClass()).shouldLog(Log.DEBUG))
-        //    _addedBy = new Exception();
-    }
-    
-    /**
-     *  @deprecated
      *  @return null always
      */
     @Deprecated
+    @SuppressWarnings("deprecation")
     public Exception getAddedBy() { return null; }
+
     public long getMadeReadyOn() { return _madeReadyOn; }
     public void madeReady() { _madeReadyOn = _context.clock().now(); }
     public void dropped() {}

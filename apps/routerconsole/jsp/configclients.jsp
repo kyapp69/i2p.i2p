@@ -1,9 +1,9 @@
 <%@page contentType="text/html"%>
 <%@page pageEncoding="UTF-8"%>
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-
 <html><head>
 <%@include file="css.jsi" %>
+<%@include file="csp-unsafe.jsi" %>
 <%=intl.title("config clients")%>
 <style type='text/css'>
 button span.hide{
@@ -11,12 +11,9 @@ button span.hide{
 }
 input.default { width: 1px; height: 1px; visibility: hidden; }
 </style>
-<script src="/js/ajax.js" type="text/javascript"></script>
 <%@include file="summaryajax.jsi" %>
-</head><body onload="initAjax()">
-
+</head><body>
 <%@include file="summary.jsi" %>
-
 <jsp:useBean class="net.i2p.router.web.helpers.ConfigClientsHelper" id="clientshelper" scope="request" />
 <jsp:setProperty name="clientshelper" property="contextId" value="<%=i2pcontextId%>" />
 <jsp:setProperty name="clientshelper" property="edit" value="<%=request.getParameter(\"edit\")%>" />
@@ -27,13 +24,7 @@ input.default { width: 1px; height: 1px; visibility: hidden; }
  <jsp:useBean class="net.i2p.router.web.helpers.ConfigClientsHandler" id="formhandler" scope="request" />
 <%@include file="formhandler.jsi" %>
  <div class="configure">
- <h3 id="i2pclientconfig"><%=intl._t("Client Configuration")%>&nbsp;
-  <span class="h3navlinks">
-   <a href="configi2cp" title="<%=intl._t("Advanced Client Interface Configuration")%>">[I2CP]</a>&nbsp;
-   <a href="configplugins" title="<%=intl._t("Plugin Configuration")%>">[Plugins]</a>&nbsp;
-   <a href="configwebapps" title="<%=intl._t("WebApp Configuration")%>">[WebApps]</a>
-  </span>
- </h3>
+ <h3 id="i2pclientconfig"><%=intl._t("Client Configuration")%></h3>
  <p class="infohelp" id="clientconf">
  <%=intl._t("The Java clients listed below are started by the router and run in the same JVM.")%>&nbsp;
  <%=intl._t("To change other client options, edit the file")%>
